@@ -1,3 +1,9 @@
+## [1.1.0](https://github.com/sergeyshmakov/runpod-mineru/compare/v1.0.0...v1.1.0) (2026-05-19)
+
+### Features
+
+* **docs:** add Choosing a GPU guide ([3aa6506](https://github.com/sergeyshmakov/runpod-mineru/commit/3aa650650fa91a79472b25f76e027428a7b93752))
+
 ## 1.0.0 (2026-05-19)
 
 ### Features
