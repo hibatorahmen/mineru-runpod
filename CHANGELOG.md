@@ -1,3 +1,9 @@
+## [1.1.5](https://github.com/sergeyshmakov/runpod-mineru/compare/v1.1.4...v1.1.5) (2026-05-19)
+
+### Bug Fixes
+
+* **hub:** pre-cache MinerU weights in image; bump test timeout to 20 min ([3bbef3a](https://github.com/sergeyshmakov/runpod-mineru/commit/3bbef3ad62c2836d1128492fa295ab63014ad56b))
+
 ## [1.1.4](https://github.com/sergeyshmakov/runpod-mineru/compare/v1.1.3...v1.1.4) (2026-05-19)
 
 ### Bug Fixes
