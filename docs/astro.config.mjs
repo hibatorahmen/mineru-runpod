@@ -12,7 +12,8 @@ export default defineConfig({
 		starlight({
 			title: "runpod-mineru",
 			description:
-				"Serverless MinerU 2.5 PDF parser on RunPod. Scales to zero, ~$0.0001 per page.",
+				"Open-source template to deploy MinerU 2.5 onto RunPod Serverless in two clicks. Self-hosted endpoint, scales to zero, ~$0.0001 per page.",
+			favicon: "/favicon.png",
 			customCss: ["./src/styles/custom.css"],
 			social: [{ icon: "github", label: "GitHub", href: REPO_URL }],
 			editLink: {

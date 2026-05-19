@@ -14,3 +14,7 @@ node_modules/
 npm-debug.log
 .npm/
 yarn.lock
+
+.mcp.json
+.playwright-mcp
+.claude

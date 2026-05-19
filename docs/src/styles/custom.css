@@ -1,11 +1,450 @@
-:root {
-	--sl-color-accent-low: #2e1065;
-	--sl-color-accent: #7c3aed;
-	--sl-color-accent-high: #ddd6fe;
-}
+/* ===================================================================
+   runpod-mineru — Digital Storybook theme
+   Palette sampled from og-default.png (deep violet, electric purple,
+   cyan glow, lightning yellow). Cartoon-vignette card treatment with
+   soft drop shadows, generous rounding, and gradient accents.
+   =================================================================== */
 
-:root[data-theme="light"] {
+/* ---- Brand palette ------------------------------------------------ */
+:root {
+	--rm-violet-950: #0d0322;
+	--rm-violet-900: #1a0b3a;
+	--rm-violet-800: #261254;
+	--rm-violet-700: #3a1b7a;
+	--rm-violet-600: #4f23a8;
+	--rm-purple-500: #7c3aed;
+	--rm-purple-400: #a855f7;
+	--rm-purple-300: #c084fc;
+	--rm-purple-200: #ddd6fe;
+	--rm-purple-100: #ede9fe;
+	--rm-purple-50: #f5f3ff;
+	--rm-magenta: #d946ef;
+	--rm-cyan-500: #06b6d4;
+	--rm-cyan-400: #22d3ee;
+	--rm-cyan-300: #67e8f9;
+	--rm-yellow: #facc15;
+	--rm-yellow-soft: #fde68a;
+
+	/* Glow effects */
+	--rm-glow-purple: 0 0 32px rgba(168, 85, 247, 0.45);
+	--rm-glow-cyan: 0 0 32px rgba(34, 211, 238, 0.35);
+	--rm-shadow-card: 0 10px 30px -10px rgba(76, 29, 149, 0.35), 0 2px 6px -2px rgba(76, 29, 149, 0.18);
+	--rm-shadow-card-hover: 0 24px 60px -18px rgba(124, 58, 237, 0.55), 0 6px 18px -8px rgba(124, 58, 237, 0.3);
+
+	/* Surfaces */
 	--sl-color-accent-low: #ede9fe;
 	--sl-color-accent: #7c3aed;
 	--sl-color-accent-high: #4c1d95;
+
+	--sl-font: "Inter var", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+	--sl-content-width: 50rem;
+}
+
+/* ---- Dark mode: deep violet space --------------------------------- */
+:root[data-theme="dark"] {
+	--sl-color-accent-low: #2e1065;
+	--sl-color-accent: #a855f7;
+	--sl-color-accent-high: #ddd6fe;
+
+	--sl-color-white: #faf5ff;
+	--sl-color-gray-1: #ede9fe;
+	--sl-color-gray-2: #c4b5fd;
+	--sl-color-gray-3: #a78bfa;
+	--sl-color-gray-4: #7c5cd9;
+	--sl-color-gray-5: #432776;
+	--sl-color-gray-6: #2a1656;
+	--sl-color-gray-7: #1a0b3a;
+	--sl-color-black: #0d0322;
+
+	--sl-color-bg: #120730;
+	--sl-color-bg-nav: rgba(18, 7, 48, 0.78);
+	--sl-color-bg-sidebar: #160a3a;
+	--sl-color-bg-inline-code: rgba(168, 85, 247, 0.16);
+	--sl-color-bg-accent: var(--rm-purple-500);
+
+	--sl-color-text: #ede9fe;
+	--sl-color-text-accent: #c4b5fd;
+	--sl-color-text-invert: #1a0b3a;
+
+	--sl-color-hairline-light: rgba(168, 85, 247, 0.18);
+	--sl-color-hairline: rgba(168, 85, 247, 0.12);
+	--sl-color-hairline-shade: rgba(168, 85, 247, 0.08);
+}
+
+/* ---- Light mode: storybook lavender page -------------------------- */
+:root[data-theme="light"] {
+	--sl-color-accent-low: #f5f3ff;
+	--sl-color-accent: #7c3aed;
+	--sl-color-accent-high: #4c1d95;
+
+	--sl-color-white: #1a0b3a;
+	--sl-color-gray-1: #2d1b5e;
+	--sl-color-gray-2: #4c2d8a;
+	--sl-color-gray-3: #6b46c1;
+	--sl-color-gray-4: #8b5cf6;
+	--sl-color-gray-5: #c4b5fd;
+	--sl-color-gray-6: #ede9fe;
+	--sl-color-gray-7: #f5f3ff;
+	--sl-color-black: #fefcff;
+
+	--sl-color-bg: #fbfaff;
+	--sl-color-bg-nav: rgba(251, 250, 255, 0.85);
+	--sl-color-bg-sidebar: #f5f3ff;
+	--sl-color-bg-inline-code: rgba(124, 58, 237, 0.08);
+
+	--sl-color-text: #2d1b5e;
+	--sl-color-text-accent: #7c3aed;
+
+	--sl-color-hairline-light: rgba(124, 58, 237, 0.15);
+	--sl-color-hairline: rgba(124, 58, 237, 0.1);
+	--sl-color-hairline-shade: rgba(124, 58, 237, 0.05);
+}
+
+/* ===================================================================
+   Page backdrop — soft cosmic glow that anchors the storybook feel
+   =================================================================== */
+body {
+	background: var(--sl-color-bg);
+	background-image:
+		radial-gradient(900px circle at 12% -10%, rgba(168, 85, 247, 0.22), transparent 60%),
+		radial-gradient(800px circle at 90% 8%, rgba(34, 211, 238, 0.14), transparent 55%),
+		radial-gradient(700px circle at 50% 120%, rgba(217, 70, 239, 0.12), transparent 60%);
+	background-attachment: fixed;
+}
+
+:root[data-theme="light"] body {
+	background-image:
+		radial-gradient(900px circle at 12% -10%, rgba(168, 85, 247, 0.18), transparent 60%),
+		radial-gradient(800px circle at 90% 8%, rgba(34, 211, 238, 0.1), transparent 55%),
+		radial-gradient(700px circle at 50% 120%, rgba(217, 70, 239, 0.08), transparent 60%);
+}
+
+/* ===================================================================
+   Header — translucent with a subtle gradient bottom border
+   =================================================================== */
+.header {
+	background: var(--sl-color-bg-nav) !important;
+	backdrop-filter: saturate(180%) blur(12px);
+	-webkit-backdrop-filter: saturate(180%) blur(12px);
+	border-bottom: 1px solid transparent !important;
+	background-image:
+		linear-gradient(var(--sl-color-bg-nav), var(--sl-color-bg-nav)),
+		linear-gradient(90deg, var(--rm-purple-400), var(--rm-cyan-400), var(--rm-magenta)) !important;
+	background-origin: border-box;
+	background-clip: padding-box, border-box;
+}
+
+.site-title {
+	font-weight: 700;
+	letter-spacing: -0.02em;
+	color: var(--sl-color-white);
+}
+
+/* ===================================================================
+   Hero — splash layout with the OG-card energy
+   =================================================================== */
+.hero {
+	position: relative;
+	padding-block: clamp(2rem, 4vw, 4rem) !important;
+}
+
+.hero > .hero-html {
+	width: min(100%, 28rem) !important;
+	filter: drop-shadow(0 20px 40px rgba(124, 58, 237, 0.35));
+}
+
+.hero h1 {
+	font-size: clamp(2.75rem, calc(1.5rem + 4.5vw), 5rem) !important;
+	font-weight: 800 !important;
+	letter-spacing: -0.035em !important;
+	line-height: 1.05 !important;
+	color: var(--sl-color-white) !important;
+	-webkit-text-fill-color: var(--sl-color-white);
+	background: none;
+}
+
+/* Highlight just the price/value tail with a gradient — keeps the rest crisp white */
+.hero h1 .rm-accent,
+.hero h1 em {
+	background: linear-gradient(135deg, var(--rm-purple-300) 0%, var(--rm-cyan-300) 100%);
+	-webkit-background-clip: text;
+	background-clip: text;
+	-webkit-text-fill-color: transparent;
+	color: transparent;
+	font-style: normal;
+}
+
+:root[data-theme="light"] .hero h1 .rm-accent,
+:root[data-theme="light"] .hero h1 em {
+	background: linear-gradient(135deg, var(--rm-purple-500) 0%, var(--rm-cyan-500) 100%);
+	-webkit-background-clip: text;
+	background-clip: text;
+	-webkit-text-fill-color: transparent;
+}
+
+.hero .tagline {
+	color: var(--sl-color-gray-2) !important;
+	font-size: clamp(1.2rem, calc(0.9rem + 0.95vw), 1.6rem) !important;
+	max-width: 42ch;
+	line-height: 1.5;
+}
+
+/* Primary CTA gets the lightning-bolt energy */
+.hero .actions a[data-variant="primary"],
+.sl-link-button.primary {
+	background: linear-gradient(135deg, var(--rm-purple-500) 0%, var(--rm-magenta) 100%) !important;
+	color: #fff !important;
+	border: none !important;
+	border-radius: 999px !important;
+	padding: 0.85rem 1.5rem !important;
+	font-weight: 600 !important;
+	box-shadow: 0 12px 30px -8px rgba(168, 85, 247, 0.55), inset 0 -2px 0 rgba(0, 0, 0, 0.15);
+	transition: transform 180ms ease, box-shadow 180ms ease, filter 180ms ease;
+}
+
+.hero .actions a[data-variant="primary"]:hover,
+.sl-link-button.primary:hover {
+	transform: translateY(-2px);
+	box-shadow: 0 20px 40px -10px rgba(168, 85, 247, 0.7), inset 0 -2px 0 rgba(0, 0, 0, 0.15);
+	filter: brightness(1.07);
+}
+
+.hero .actions a[data-variant="minimal"],
+.sl-link-button.minimal {
+	color: var(--sl-color-text) !important;
+	border-radius: 999px !important;
+	padding: 0.85rem 1.25rem !important;
+	font-weight: 500 !important;
+	transition: background 180ms ease, color 180ms ease;
+}
+
+.hero .actions a[data-variant="minimal"]:hover,
+.sl-link-button.minimal:hover {
+	background: var(--sl-color-bg-inline-code) !important;
+	color: var(--sl-color-text-accent) !important;
+}
+
+/* ===================================================================
+   Cards — vector storybook vignettes
+   =================================================================== */
+.card {
+	position: relative;
+	border-radius: 1.25rem !important;
+	border: 1px solid var(--sl-color-hairline-light) !important;
+	padding: 1.5rem !important;
+	background: var(--sl-color-bg-sidebar);
+	background-image:
+		linear-gradient(135deg, rgba(168, 85, 247, 0.06) 0%, rgba(34, 211, 238, 0.04) 100%);
+	box-shadow: var(--rm-shadow-card);
+	transition: transform 240ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 240ms ease, border-color 240ms ease;
+	overflow: hidden;
+}
+
+.card::before {
+	content: "";
+	position: absolute;
+	inset: 0;
+	background: radial-gradient(280px circle at top right, rgba(168, 85, 247, 0.18), transparent 60%);
+	opacity: 0;
+	transition: opacity 240ms ease;
+	pointer-events: none;
+}
+
+.card:hover {
+	transform: translateY(-4px);
+	border-color: rgba(168, 85, 247, 0.35) !important;
+	box-shadow: var(--rm-shadow-card-hover);
+}
+
+.card:hover::before {
+	opacity: 1;
+}
+
+/* Card icons get a glowy chip backdrop */
+.card .icon {
+	background: linear-gradient(135deg, var(--rm-purple-500), var(--rm-magenta)) !important;
+	color: #fff !important;
+	border-radius: 0.75rem !important;
+	padding: 0.5rem !important;
+	box-shadow: 0 8px 20px -6px rgba(168, 85, 247, 0.55);
+}
+
+.card .title {
+	font-weight: 700 !important;
+	letter-spacing: -0.015em;
+}
+
+/* CardGrid spacing breathes more */
+.sl-container .card-grid,
+starlight-card-grid,
+.card-grid {
+	gap: 1.25rem !important;
+}
+
+/* ===================================================================
+   Markdown content — headings with gradient underline accents
+   =================================================================== */
+.sl-markdown-content h2 {
+	position: relative;
+	font-weight: 800 !important;
+	letter-spacing: -0.025em !important;
+	margin-top: 3rem !important;
+	padding-bottom: 0.5rem;
+}
+
+.sl-markdown-content h2::after {
+	content: "";
+	display: block;
+	height: 3px;
+	width: 3rem;
+	margin-top: 0.5rem;
+	border-radius: 999px;
+	background: linear-gradient(90deg, var(--rm-purple-400), var(--rm-magenta));
+}
+
+.sl-markdown-content h3 {
+	font-weight: 700 !important;
+	letter-spacing: -0.02em !important;
+}
+
+.sl-markdown-content a:not(.sl-link-button):not(.card) {
+	color: var(--rm-purple-400);
+	text-decoration: underline;
+	text-decoration-color: rgba(168, 85, 247, 0.4);
+	text-decoration-thickness: 2px;
+	text-underline-offset: 3px;
+	transition: text-decoration-color 180ms ease, color 180ms ease;
+}
+
+:root[data-theme="light"] .sl-markdown-content a:not(.sl-link-button):not(.card) {
+	color: var(--rm-purple-500);
+}
+
+.sl-markdown-content a:not(.sl-link-button):not(.card):hover {
+	color: var(--rm-magenta);
+	text-decoration-color: var(--rm-magenta);
+}
+
+/* Inline code chip */
+.sl-markdown-content :not(pre) > code {
+	background: var(--sl-color-bg-inline-code) !important;
+	color: var(--rm-purple-300) !important;
+	padding: 0.15rem 0.4rem !important;
+	border-radius: 0.4rem !important;
+	font-size: 0.92em;
+	border: 1px solid var(--sl-color-hairline-light);
+}
+
+:root[data-theme="light"] .sl-markdown-content :not(pre) > code {
+	color: var(--rm-purple-500) !important;
+}
+
+/* ===================================================================
+   Code blocks — softer purple frame
+   =================================================================== */
+.expressive-code .frame {
+	border-radius: 0.9rem !important;
+	box-shadow: 0 12px 30px -12px rgba(76, 29, 149, 0.4) !important;
+	border: 1px solid var(--sl-color-hairline-light) !important;
+}
+
+.expressive-code pre {
+	border-radius: 0.9rem !important;
+}
+
+/* ===================================================================
+   Sidebar — chunky, friendly, with active-link pop
+   =================================================================== */
+.sidebar-pane {
+	background: linear-gradient(180deg, var(--sl-color-bg-sidebar) 0%, var(--sl-color-bg) 100%);
+	border-inline-end: 1px solid var(--sl-color-hairline-light);
+}
+
+.sidebar-content .top-level > li > details > summary,
+.sidebar-content .top-level > li > a,
+.sidebar-content .top-level > li > span {
+	font-weight: 700 !important;
+	letter-spacing: -0.01em;
+	color: var(--sl-color-white) !important;
+}
+
+.sidebar-content a {
+	border-radius: 0.5rem !important;
+	transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.sidebar-content a:hover {
+	background: var(--sl-color-bg-inline-code);
+	color: var(--sl-color-text-accent) !important;
+	transform: translateX(2px);
+}
+
+.sidebar-content a[aria-current="page"] {
+	background: linear-gradient(135deg, rgba(168, 85, 247, 0.22), rgba(217, 70, 239, 0.12)) !important;
+	color: var(--sl-color-text-accent) !important;
+	font-weight: 600;
+	box-shadow: inset 3px 0 0 var(--rm-purple-400);
+}
+
+/* ===================================================================
+   Right-side TOC
+   =================================================================== */
+.right-sidebar h2 {
+	font-weight: 700 !important;
+	letter-spacing: -0.01em;
+	color: var(--sl-color-text-accent);
+	text-transform: uppercase;
+	font-size: 0.75rem !important;
+}
+
+starlight-toc a[aria-current="true"] {
+	color: var(--rm-purple-400) !important;
+	font-weight: 600;
+}
+
+/* ===================================================================
+   Search input
+   =================================================================== */
+site-search button[data-open-modal] {
+	border-radius: 999px !important;
+	border: 1px solid var(--sl-color-hairline-light) !important;
+	background: var(--sl-color-bg-sidebar) !important;
+	transition: border-color 180ms ease, box-shadow 180ms ease;
+}
+
+site-search button[data-open-modal]:hover {
+	border-color: var(--rm-purple-400) !important;
+	box-shadow: 0 0 0 4px rgba(168, 85, 247, 0.12);
+}
+
+/* ===================================================================
+   Storybook flourish — subtle sparkles in hero (decorative)
+   =================================================================== */
+@keyframes rm-twinkle {
+	0%, 100% { opacity: 0.4; transform: scale(1); }
+	50% { opacity: 0.9; transform: scale(1.15); }
+}
+
+.hero-html [data-rm-twinkle] {
+	animation: rm-twinkle 3.2s ease-in-out infinite;
+	transform-origin: center;
+}
+
+.hero-html [data-rm-twinkle="2"] { animation-delay: 0.6s; }
+.hero-html [data-rm-twinkle="3"] { animation-delay: 1.2s; }
+.hero-html [data-rm-twinkle="4"] { animation-delay: 1.8s; }
+
+/* ===================================================================
+   Last-updated and edit-link footer items
+   =================================================================== */
+.meta a {
+	color: var(--rm-purple-300) !important;
+}
+
+/* Reduce motion respect */
+@media (prefers-reduced-motion: reduce) {
+	.card, .sidebar-content a, .hero .actions a, .hero-html [data-rm-twinkle] {
+		transition: none !important;
+		animation: none !important;
+	}
 }

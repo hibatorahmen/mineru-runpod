@@ -1,6 +1,6 @@
 ---
 title: Overview
-description: What runpod-mineru is, who it's for, and how it fits into a document pipeline.
+description: Architecture, what's in the repo, supported workloads, and how it compares to Marker, GROBID, and Nougat.
 ---
 
 `runpod-mineru` is a generic, reusable [MinerU 2.5](https://github.com/opendatalab/MinerU) PDF-parsing service running on [RunPod Serverless](https://runpod.io?ref=31jdfpnq). The repo deliberately knows nothing about any specific downstream system — it ships a worker image, a small Python client, and the deploy / destroy glue. Anything that needs `PDF → structured Markdown + JSON` (a RAG pipeline, a document indexer, an Office-doc archive) calls it the same way.
