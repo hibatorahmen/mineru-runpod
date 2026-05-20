@@ -1,3 +1,9 @@
+## [1.1.15](https://github.com/sergeyshmakov/runpod-mineru/compare/v1.1.14...v1.1.15) (2026-05-20)
+
+### Bug Fixes
+
+* revert back since don't help to hub release ([e15ba6f](https://github.com/sergeyshmakov/runpod-mineru/commit/e15ba6f32e1e0c9c4654debd6a65720d06b67fa0))
+
 ## [1.1.14](https://github.com/sergeyshmakov/runpod-mineru/compare/v1.1.13...v1.1.14) (2026-05-20)
 
 ### Bug Fixes
