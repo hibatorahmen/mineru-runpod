@@ -109,7 +109,7 @@ Parsing accuracy is MinerU's domain; their published [OmniDocBench](https://gith
 
 | | runpod-mineru (this) | Marker | GROBID | Nougat |
 |---|---|---|---|---|
-| Scale-to-zero | ✅ | ⚠️ possible via serverless | ❌ (always-on) | ❌ |
+| Scale-to-zero | ✅ ready to use | ⚠️ possible, needs extra setup | ❌ (always-on) | ❌ |
 | GPU support | GPU only | CPU or GPU | CPU | GPU required |
 | Equations | ✅ LaTeX | ✅ LaTeX | ❌ | ✅ LaTeX |
 | Multi-lang | ✅ 109 langs (pipeline backend) | per upstream README | EN only | per upstream README |
