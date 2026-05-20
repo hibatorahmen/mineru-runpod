@@ -1,3 +1,9 @@
+## [1.1.12](https://github.com/sergeyshmakov/runpod-mineru/compare/v1.1.11...v1.1.12) (2026-05-20)
+
+### Bug Fixes
+
+* **worker:** override HF_HUB_OFFLINE=0 inline on the model-bake RUN step ([70aa5fe](https://github.com/sergeyshmakov/runpod-mineru/commit/70aa5fe6a0fde95cb97bfcacc2256a8c5c8f9ddc))
+
 ## [1.1.11](https://github.com/sergeyshmakov/runpod-mineru/compare/v1.1.10...v1.1.11) (2026-05-20)
 
 ### Bug Fixes
