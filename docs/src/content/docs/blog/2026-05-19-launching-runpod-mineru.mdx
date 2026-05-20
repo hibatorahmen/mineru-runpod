@@ -13,7 +13,7 @@ tags:
 If you're building a RAG pipeline, a document indexer, or anything else that ingests PDFs at scale, you've probably hit the same wall I did:
 
 - **Hosted APIs are expensive** at high volume. Pennies per page becomes dollars per thousand becomes thousands per million.
-- **CPU parsers are slow.** I clocked Marker at **0.03 pages/sec** on a 32-thread workstation. That's ~30 hours per 5,000 pages.
+- **CPU parsers are slow.** I clocked Marker at **0.03 pages/sec** on a 32-thread workstation (single-PDF sequential, CPU only — Marker is much faster in GPU batch mode). That's ~30 hours per 5,000 pages in this configuration.
 - **Renting a permanent GPU pod** is wasteful. You pay all night for a thing that processes documents in bursts.
 
 MinerU 2.5 is genuinely state-of-the-art for PDF → Markdown / JSON. See the [technical report on arxiv](https://arxiv.org/abs/2604.04771), the [opendatalab/MinerU repo](https://github.com/opendatalab/MinerU), and the [1.2B model card on HuggingFace](https://huggingface.co/opendatalab/MinerU2.5-Pro-2604-1.2B). The license relaxed to Apache 2.0 recently. RunPod's serverless platform scales to zero when nothing is calling. The obvious move is to wire those two together.
@@ -25,8 +25,8 @@ Here's the [open-source repo I shipped](https://github.com/sergeyshmakov/runpod-
 | Tool / setup | Per-page cost | Per-page time |
 |---|---:|---:|
 | OCR APIs (typical) | $0.001 – $0.01 | depends |
-| Self-hosted GPU pod (24h on $0.44/h GPU) | $0.001 – $0.002 | fast |
-| **MinerU on RunPod serverless (this)** | **~$0.0001** | **~0.2 s** |
+| Self-hosted GPU pod (always-on 24h on community-cloud A5000) | $0.001 – $0.003 | fast |
+| **MinerU on RunPod serverless (this)** | **~$0.0003** | **~0.5 s** |
 | Marker / Nougat on CPU | $0 cash, $$$ time | ~30 s |
 
 The trick is **scale-to-zero**. RunPod bills per-second; when no one's calling, you owe nothing. When traffic arrives, FlashBoot spins a worker in 10–20 s and serves until 10 s of idle, then disappears.
@@ -97,7 +97,7 @@ client.save_tarball(result, "./out/doc")
 # → ./out/doc/images/*.png
 ```
 
-That's it. First job takes ~30–60 s because the worker is cold and downloads the MinerU 2.5 model (~2.5 GB). Subsequent jobs in the same warm window are ~5 pages/sec. After 10 s of idle, the worker scales to zero and you stop paying.
+That's it. First job takes ~30–60 s because the worker is cold and downloads the MinerU 2.5 model (~2.5 GB). Subsequent jobs in the same warm window run at ~2 pages/sec (VLM backend, ~0.5 s per page). After 10 s of idle, the worker scales to zero and you stop paying.
 
 ## What's in the JSON
 
@@ -118,7 +118,7 @@ For a document indexer, you'd typically read `content_list_v2.json`, group entri
 
 ## What I'd watch out for
 
-- **Cost ceiling on long jobs.** A 5,000-page document is roughly **~18 min** at 5 p/s. Set `execution_timeout` accordingly; the repo defaults to 900 s (good for ~250 pages), bump it for full books.
+- **Cost ceiling on long jobs.** A 5,000-page document is roughly **~40 min** at 2 p/s on the VLM backend. Set `execution_timeout` accordingly; the repo defaults to 900 s (good for a few hundred pages), bump it for full books.
 - **File size for inline transport.** Inline base64 jobs cap around 10 MB. For bigger files, pass a `file_url` and let the worker fetch.
 - **Cold-start tax under low traffic.** If your usage pattern is "1 document every 30 minutes", scale-to-zero is wasted; you're always paying cold starts. Either bump `idle_timeout` or run `workers_min=1`.
 

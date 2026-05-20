@@ -66,7 +66,7 @@ class MineruClient:
                                   Best for non-Latin scripts; respects `lang`.
             "vlm-auto-engine"    VLM via vLLM (default). Fast on EN/CH; ignores `lang`.
             "vlm-http-client"    VLM via external vLLM server (`server_url` required).
-            "hybrid-auto-engine" Pipeline + VLM auto-routed per page.
+            "hybrid-auto-engine" Pipeline + VLM auto-routed based on page content.
             "hybrid-http-client" Hybrid with external VLM server.
 
         For non-English/Chinese scripts (e.g. Russian/Cyrillic), use

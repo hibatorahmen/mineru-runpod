@@ -1,10 +1,10 @@
 ---
 title: runpod-mineru
-description: Open-source template to deploy MinerU (3.1 runtime, 2.5 Pro VLM) onto RunPod Serverless in two clicks. Your endpoint, scales to zero, ~$0.0001 per page.
+description: Open-source template to deploy MinerU (3.1 runtime, 2.5 Pro VLM) onto RunPod Serverless in two clicks. Your endpoint, scales to zero, ~$0.0003 per page on 24 GB Ampere.
 template: splash
 hero:
   title: Deploy <br/>MinerU 2.5 Pro <br/>on RunPod <br/><span class="rm-accent">in two clicks</span>
-  tagline: Open-source template that wires the SOTA MinerU PDF parser onto your own RunPod Serverless endpoint. MinerU 3.1.x runtime running the `MinerU2.5-Pro-2604-1.2B` VLM. ~$0.0001 per page, scales to zero.
+  tagline: Open-source template that wires the SOTA MinerU PDF parser onto your own RunPod Serverless endpoint. MinerU 3.1.x runtime running the `MinerU2.5-Pro-2604-1.2B` VLM. ~$0.0003 per page on 24 GB Ampere serverless, scales to zero.
   image:
     html: |
       <img src="/runpod-mineru/promo_bg.png" alt="PDF transformed to Markdown by a serverless cloud" class="rm-hero-promo" loading="eager" decoding="async" width="1024" height="1024" />
@@ -39,7 +39,7 @@ Under the hood it's one Docker image wrapping [MinerU](https://github.com/openda
     The 1.2B MinerU VLM tops [OmniDocBench](https://github.com/opendatalab/OmniDocBench) for text, tables, formulas, and reading order. Combined with the pipeline backend, 109 languages of OCR, handwriting included.
   </Card>
   <Card title="Pay per second, not per hour" icon="rocket">
-    `idle_timeout=10` + FlashBoot means a 100-page doc lands for about $0.01. No worker running? No bill.
+    `idle_timeout=10` + FlashBoot means a 100-page doc lands for about $0.03 on a 24 GB Ampere worker. No worker running? No bill.
   </Card>
   <Card title="No glue code" icon="puzzle">
     Deploy from the Hub in one click, or fork and let RunPod auto-build your copy. Either way: ten minutes from sign-up to first parse.

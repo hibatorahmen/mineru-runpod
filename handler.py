@@ -22,7 +22,7 @@ Backends (per MinerU 3.1.x official docs):
     vlm-http-client    — Same VLM, but served by an external vLLM server (set
                           `server_url`). Useful for splitting model-serving from
                           the worker pool.
-    hybrid-auto-engine — Mix of pipeline + VLM, auto-routed per page. Best
+    hybrid-auto-engine — Mix of pipeline + VLM, auto-routed based on page content. Best
                           quality on mixed-content docs; largest VRAM footprint.
     hybrid-http-client — Hybrid with external VLM server.
 

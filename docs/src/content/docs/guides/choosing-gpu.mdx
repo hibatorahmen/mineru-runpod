@@ -12,7 +12,7 @@ The repo's default GPU pool is `AMPERE_24` (24 GB Ampere — RTX 3090 / A5000 cl
 | Parsing small-to-medium docs (≤100 pages) one at a time | `AMPERE_24` or `ADA_24` | Default. 24 GB fits the model + sequential page KV cache with headroom. |
 | Doing concurrent batching inside a single worker | `AMPERE_48` | vLLM async engine can grow KV cache beyond 24 GB under batch pressure. |
 | Parsing large books (100–1,000 pages) | `AMPERE_48` | Headroom for dense layout / long reading-order context. |
-| Parsing huge documents (1,000+ pages) | `AMPERE_48` + `--backend pipeline` | Switch off vLLM KV-cache mode; pipeline backend processes page-by-page at ~6 GB. |
+| Parsing huge documents (1,000+ pages) | `AMPERE_48` + `--backend pipeline` | Switch off vLLM KV-cache mode; pipeline backend processes page-by-page with a 4 GB minimum (per MinerU upstream). |
 
 If you're unsure, **start with the default `AMPERE_24` and watch for OOM in the worker logs**. Bumping to a 48 GB pool is a one-line change to `deploy.py --gpu-ids` or the `gpuIds` field in your endpoint config.
 
@@ -44,7 +44,7 @@ Implications:
 | Single-doc sequential (default config) | ~13 GiB | 24 GB ✓ |
 | Single-worker, light async batching (≤4 concurrent pages) | ~14–18 GiB | 24 GB ✓ |
 | Single-worker, heavy batching (8+ concurrent, large docs) | 20+ GiB | 48 GB recommended |
-| Pipeline backend (`backend: "pipeline"`) — no vLLM KV cache | ~6 GiB | 24 GB easily ✓ |
+| Pipeline backend (`backend: "pipeline"`) — no vLLM KV cache | 4 GB min (MinerU upstream) | 24 GB easily ✓ |
 
 ## Why the MinerU paper used 48 GB
 
@@ -101,14 +101,14 @@ MinerU 3.1.x exposes five backends; the template accepts all of them as a per-jo
 | Backend | What it runs | When to pick it | Per-page VRAM |
 |---|---|---|---|
 | `vlm-auto-engine` *(default)* | The `MinerU2.5-Pro-2604-1.2B` VLM via vLLM | English / Chinese (per model card tags), short-to-medium docs, fast wall time | ~13 GiB |
-| `pipeline` | PaddleOCR + dedicated layout/formula/table models | Non-Latin scripts (use a script-family `lang` code), very long docs, constant-memory workloads | **~6 GiB floor** |
-| `hybrid-auto-engine` | Pipeline + VLM, auto-routed per page | Mixed-content docs where the pipeline+VLM combination outperforms either alone | Highest |
+| `pipeline` | PaddleOCR + dedicated layout/formula/table models | Non-Latin scripts (use a script-family `lang` code), very long docs, constant-memory workloads | **4 GB min** (per MinerU upstream) |
+| `hybrid-auto-engine` | Pipeline + VLM, auto-routed based on content | Mixed-content docs where the pipeline+VLM combination outperforms either alone | Highest |
 | `vlm-http-client` | Same VLM via an external vLLM OpenAI-compatible server | Split-tier deploys — keep a 24 GB worker cheap, run vLLM on a separate always-on box | Low (no model on worker) |
 | `hybrid-http-client` | Hybrid with external VLM server | Same split-tier idea, on hybrid workloads | Low |
 
 ### Pipeline: the constant-memory escape hatch
 
-Pipeline trades raw speed for memory predictability: page-by-page streaming with no vLLM KV-cache accumulation, **~6 GiB VRAM floor**. Slower per page (~3–5 s vs ~0.5 s for the VLM) but constant-memory regardless of document length. Required for non-Latin scripts because the VLM ignores `lang` and falls back to Latin transliteration on Cyrillic / Arabic / Devanagari / etc.
+Pipeline trades raw speed for memory predictability: page-by-page streaming with no vLLM KV-cache accumulation, **4 GB minimum** per MinerU's hardware compatibility table. Slower per page (~3–5 s vs ~0.5 s for the VLM, our measurements) but constant-memory regardless of document length. Required for non-Latin scripts because the VLM ignores `lang` and falls back to Latin transliteration on Cyrillic / Arabic / Devanagari / etc.
 
 ```json
 {
@@ -215,7 +215,7 @@ That's why the template's default `gpuIds` list excludes `ADA_48_PRO`. If you ne
 
 ## Cost implications
 
-GPU pricing on RunPod varies by pool, availability, and whether you're on spot vs on-demand. The repo's per-page math (~$0.0001 on a 24 GB Ampere at ~$0.44/h) assumes the default pool. For exact, current per-hour numbers, see [RunPod's pricing page](https://www.runpod.io/pricing).
+GPU pricing on RunPod varies by pool, availability, and whether you're on spot vs on-demand. The repo's per-page math (~$0.0003 on a 24 GB Ampere serverless pool at ~$2.48/h Flex) assumes the default pool. For exact, current per-hour numbers, see [RunPod's pricing page](https://www.runpod.io/pricing) — rates change.
 
 Rough relative cost, taking `AMPERE_24` as the baseline:
 

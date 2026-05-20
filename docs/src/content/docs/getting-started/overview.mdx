@@ -26,7 +26,7 @@ description: Architecture, what's in the repo, supported workloads, and how it c
 ## Why MinerU + serverless
 
 - **Accuracy.** The `MinerU2.5-Pro-2604-1.2B` VLM leads the [OmniDocBench](https://github.com/opendatalab/OmniDocBench) leaderboard on text, formula, table, and reading-order metrics — see the [HuggingFace model card](https://huggingface.co/opendatalab/MinerU2.5-Pro-2604-1.2B) and the [technical report](https://arxiv.org/abs/2604.04771).
-- **Economics.** Per-second billing on RunPod with FlashBoot means an idle worker costs nothing. ~$0.0001 per page on a 24 GB Ampere GPU at $0.44/h.
+- **Economics.** Per-second billing on RunPod with FlashBoot means an idle worker costs nothing. ~$0.0003 per page on 24 GB Ampere serverless at current rates (see [RunPod pricing](https://www.runpod.io/pricing); rates change).
 - **Licensing.** MinerU is Apache 2.0 with explicit commercial thresholds (free below 100M MAU and $20M monthly revenue, with attribution). Among open-source GPU-class PDF parsers, that's the cleanest license for production SaaS use.
 
 ## How it compares
@@ -35,13 +35,12 @@ description: Architecture, what's in the repo, supported workloads, and how it c
 |---|---|---|---|---|
 | Scale-to-zero | ✅ | ⚠️ possible | ❌ always-on | ❌ |
 | GPU | required | CPU or GPU | CPU | required |
-| Tables | ✅ structured | ⚠️ noisy | ⚠️ refs only | ⚠️ |
 | Equations | ✅ LaTeX | ✅ LaTeX | ❌ | ✅ LaTeX |
-| Multi-lang | ✅ 109 | ⚠️ Latin-heavy | EN only | EN/limited |
-| License | Apache 2.0 + thresholds | **GPL-3.0 code + RAIL-M weights** | Apache 2.0 | MIT code, **CC-BY-NC weights** |
-| Commercial SaaS | ✅ | ❌ blocked for competing services | ✅ | ❌ blocked |
+| Multi-lang | ✅ 109 (pipeline backend) | per upstream README | EN only | per upstream README |
+| License | Apache 2.0 + thresholds | **GPL-3.0 code + modified RAIL-M weights** | Apache 2.0 | MIT code, **CC-BY-NC 4.0 weights** |
+| Commercial SaaS | ✅ | ⚠️ depends on RAIL-M competitor clause | ✅ | ⚠️ subject to CC-BY-NC non-commercial clause |
 
-Marker uses Surya as its in-process OCR/layout engine; Surya's weights ship under modified RAIL-M, whose commercial clause bars use by any entity offering a competing PDF-parsing product, regardless of revenue or company size. Datalab's newer Chandra model (what their hosted API runs) carries the same restriction.
+Marker uses Surya as its in-process OCR/layout engine; Surya's weights ship under a modified RAIL-M license. The license's §2(c) competitor clause does not include the $2M revenue carveout that §2(a) and §2(b) carry, while Marker's own README markets the model weights as free for "startups under $2M funding/revenue." The two read differently — get counsel before depending on Marker for a service that could be characterized as competitive. Datalab's [Chandra](https://github.com/datalab-to/chandra) model (what their hosted API runs) carries the same modified RAIL-M license.
 
 See the [project README](https://github.com/sergeyshmakov/runpod-mineru#how-does-it-compare) for the fully source-cited version of this comparison.
 

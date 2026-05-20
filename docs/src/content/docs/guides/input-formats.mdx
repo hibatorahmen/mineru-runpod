@@ -27,7 +27,7 @@ The five MinerU backends (see [Picking a backend](/runpod-mineru/guides/choosing
 
 - **`vlm-auto-engine`** (default): MinerU's end-to-end VLM. Best for **PDF**. MinerU's README attaches the [109-language claim](https://github.com/opendatalab/MinerU#supported-languages) specifically to the pipeline backend's OCR layer; the VLM's [model card](https://huggingface.co/opendatalab/MinerU2.5-Pro-2604-1.2B) carries only `English` and `Chinese` HuggingFace language tags. Empirically the VLM transliterates non-Latin scripts (Cyrillic, Arabic, Devanagari) to Latin glyphs rather than producing the real characters. For non-Latin content, prefer `pipeline` with a script-family `lang` code.
 - **`pipeline`**: native multi-language OCR (109 languages). Best for **images** and **scanned PDFs without an embedded text layer**. Respects the `lang` parameter (script-family codes — see below).
-- **`hybrid-auto-engine`**: routes per page. Best when you don't know in advance what mix of layouts you have.
+- **`hybrid-auto-engine`**: routes between pipeline and VLM based on page content. Best when you don't know in advance what mix of layouts you have.
 
 Office formats (DOCX/PPTX/XLSX) are parsed by MinerU's dedicated analysers regardless of which `backend` you set — the choice only affects which engine handles the *embedded* graphics / equations / scanned regions inside the document.
 
