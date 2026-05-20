@@ -37,7 +37,7 @@ What to look at:
 | `model_dir` | Filesystem path of the snapshot that actually loaded. Both VLM and pipeline models are baked into the image at `/root/.cache/huggingface/`; if this is `null` on a successful job, the image build skipped the model bake step (unusual — file a bug) |
 | `gpu.compute_capability` | 8.6 = Ampere (3090, A5000, A6000), 8.9 = Ada (4090, RTX 6000 Ada), 9.0 = Hopper (H100), 12.0 = **Blackwell — VLM will crash** |
 | `phase_ms.fetch_input` | If hundreds of seconds on a `file_url` job, the source URL is slow / failing |
-| `phase_ms.mineru_parse` | Per-page guidance for warm workers, **highly GPU-dependent**: MinerU upstream cites **~0.5 s/page (2.12 fps) on an A100** for the VLM backend; we measured **~3.5 s/page on an A5000 24 GB** under the default `gpu_memory_utilization=0.5`. Pipeline backend is ~3–5 s/page across GPUs (CPU-bound for layout, GPU-bound only for OCR). **First call on a fresh worker is much higher** (model load + vLLM warmup adds ~90–130 s for the VLM backend). If a warm-worker call is 5× the expected per-page number for your GPU, you're memory-bound and vLLM is swapping |
+| `phase_ms.mineru_parse` | Per-page guidance for warm workers, **highly GPU- and content-dependent**: MinerU upstream cites **~0.5 s/page (2.12 fps) on an A100** for the VLM backend; we measured a range of **~1 s/page on uniform multi-page reports up to ~10 s/page on dense financial forms** on an A5000 24 GB (≈3.5 s/page is a reasonable single-number estimate) under the default `gpu_memory_utilization=0.5`. Pipeline backend is ~3–5 s/page across GPUs (CPU-bound for layout, GPU-bound only for OCR). **First call on a fresh worker is much higher** (model load + vLLM warmup adds ~90–130 s for the VLM backend). If a warm-worker call is 5× the expected per-page number for your GPU and content type, you're memory-bound and vLLM is swapping |
 
 The worker also prints two lines to stdout — visible in RunPod's worker logs:
 
@@ -98,7 +98,7 @@ CUDA error (...flash-attention/hopper/flash_fwd_launch_template.h:188): invalid 
 | Scenario | First-job latency |
 |---|---|
 | Warm worker, VLM, on A100 (per MinerU upstream) | ~0.5 s/page (2.12 fps) |
-| Warm worker, VLM, on A5000 24 GB (our measurement) | ~3.5 s/page |
+| Warm worker, VLM, on A5000 24 GB (our measurement) | ~1 s/page (uniform reports) – ~10 s/page (dense forms) |
 | Warm worker, pipeline (any GPU ≥ 4 GB) | ~3–5 s/page |
 | FlashBoot snapshot restore | ~30–60 s for the first job (RunPod's documented FlashBoot benefit) |
 | Cold worker, no FlashBoot, first VLM call | ~90–130 s for the first job (model load + vLLM warmup) |
@@ -124,6 +124,47 @@ CUDA error (...flash-attention/hopper/flash_fwd_launch_template.h:188): invalid 
 
 See [Choosing a GPU](/runpod-mineru/guides/choosing-gpu/) for the VRAM math.
 
+## `unexpected handler return type: <class 'NoneType'>` after a successful parse
+
+**Symptom**: the client raises `MineruClientError: unexpected handler return type: <class 'NoneType'>` (or `run_sync` returns `None` directly). Worker logs show the handler **completed successfully** — `[mineru-worker] done: elapsed=Xs phase_ms={...}` — immediately followed by:
+
+```
+"Failed to return job results. | 400, message='Bad Request',
+ url='https://api.runpod.ai/v2/<endpoint>/job-done/<worker>/<request>?gpu=...&isStream=false'"
+```
+
+**Cause**: RunPod's `/runsync` gateway caps the **response** payload at ~20 MB. The worker built a valid result; when it tried to POST it back via `/job-done`, the gateway returned HTTP 400 and discarded it. The SDK then sees no output → `None` → our client raises this error.
+
+Triggers (measured on a real 82-page PDF):
+
+- `return: "inline"` — markdown + content_list + middle.json + base64 images add up fast; ~80 pages with embedded images was enough to exceed the cap.
+- `return: "tarball_b64"` — gzip compresses the JSON, but the images inside the tarball are already raster bytes, so it often doesn't fit either. Confirmed same failure on the same doc.
+
+**Fix**: use `return: "s3"` for large outputs. The worker uploads the .tar.gz to an S3-compatible bucket and returns only a small presigned URL (~1 h TTL) — no gateway cap in the path.
+
+```json
+{
+  "input": {
+    "file_url": "https://example.com/big.pdf",
+    "return": "s3"
+  }
+}
+```
+
+Configure the bucket via these env vars on the **endpoint** (not the template):
+
+| Env var | Cloudflare R2 example |
+|---|---|
+| `BUCKET_ENDPOINT_URL` | `https://<account-id>.r2.cloudflarestorage.com` |
+| `BUCKET_NAME` | your bucket name |
+| `BUCKET_ACCESS_KEY_ID` | R2 API token access key |
+| `BUCKET_SECRET_ACCESS_KEY` | R2 API token secret |
+| `BUCKET_REGION` *(optional)* | `auto` for R2 |
+
+The Python client handles the rest via `client.save_s3_tarball(result, dest_dir)` — it follows `result["tarball_url"]`, downloads the .tar.gz, and extracts. From curl, the response includes `tarball_url`, `tarball_url_expires_in`, and `bucket_key`; download within the TTL.
+
+If you can't wire S3, the fallback is **page chunking**: split with `start_page` / `end_page` into segments small enough that each tarball fits under the cap, then concatenate the `.md` files client-side. Slower (two cold starts if workers go cold between calls) but no infra changes.
+
 ## Worker returns `ValueError: input bytes do not match any supported format`
 
 **Symptom**: the response has `ok: false` and the above error message.
@@ -147,7 +188,7 @@ Most common reasons:
 **Fix**:
 - **Client-side**: pass a larger `timeout` to `parse_document(timeout=3600, ...)`
 - **Endpoint-side**: bump `--execution-timeout` in `deploy.py` (defaults to 900 s). Use `--execution-timeout 3600` for full books.
-- **Per-page math (warm worker, GPU-dependent)**: MinerU upstream cites ~0.5 s/page for the VLM backend on an A100. We measured ~3.5 s/page on an A5000 24 GB. Pipeline ≈ 3–5 s/page across GPUs. A 1000-page book on pipeline = ~3000–5000 s; on VLM-on-A5000 ≈ ~3500 s; on VLM-on-A100 ≈ ~500 s. **Add 90–130 s for the first call on a cold worker if VLM** (model load + vLLM warmup) — the cold-start tax is paid once per worker, not per page.
+- **Per-page math (warm worker, GPU- and content-dependent)**: MinerU upstream cites ~0.5 s/page for the VLM backend on an A100. We measured **~1–10 s/page on an A5000 24 GB depending on content density** (uniform multi-page reports run fast; dense financial forms run slow). Pipeline ≈ 3–5 s/page across GPUs. A 1000-page book on pipeline = ~3000–5000 s; on VLM-on-A5000 ≈ ~1000–10000 s depending on content; on VLM-on-A100 ≈ ~500 s. **Add 90–130 s for the first call on a cold worker if VLM** (model load + vLLM warmup) — the cold-start tax is paid once per worker, not per page.
 
 ## Getting more help
 

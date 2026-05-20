@@ -108,7 +108,7 @@ MinerU 3.1.x exposes five backends; the template accepts all of them as a per-jo
 
 ### Pipeline: the constant-memory escape hatch
 
-Pipeline trades raw speed for memory predictability: page-by-page streaming with no vLLM KV-cache accumulation, **4 GB minimum** per MinerU's hardware compatibility table. Per-page time is **~3–5 s across GPUs** for pipeline. The VLM backend is much more GPU-sensitive: MinerU upstream claims **~0.5 s/page (2.12 fps) on an A100**; we measured **~3.5 s/page on an A5000 24 GB** under our default config. So VLM-on-A100 ≈ 7× faster than pipeline; VLM-on-A5000 ≈ same speed as pipeline. The pipeline backend uses PaddleOCR with explicit script-family models (109 languages per MinerU's README) and is the documented-safe choice for non-Latin scripts; empirically the Pro VLM also handles Cyrillic (Russian) correctly even though `lang` is ignored, but coverage of other non-Latin scripts on the VLM is undocumented.
+Pipeline trades raw speed for memory predictability: page-by-page streaming with no vLLM KV-cache accumulation, **4 GB minimum** per MinerU's hardware compatibility table. Per-page time is **~3–5 s across GPUs** for pipeline. The VLM backend is much more GPU-sensitive AND content-sensitive: MinerU upstream claims **~0.5 s/page (2.12 fps) on an A100**; we measured **~1 s/page on uniform multi-page reports up to ~10 s/page on dense financial forms** on an A5000 24 GB (≈3.5 s/page as a single-number estimate). So VLM-on-A100 ≈ 7× faster than pipeline; VLM-on-A5000 is roughly even with pipeline on average but can be much faster on light content. The pipeline backend uses PaddleOCR with explicit script-family models (109 languages per MinerU's README) and is the documented-safe choice for non-Latin scripts; empirically the Pro VLM also handles Cyrillic (Russian) correctly even though `lang` is ignored, but coverage of other non-Latin scripts on the VLM is undocumented.
 
 ```json
 {
@@ -125,6 +125,8 @@ Script-family `lang` codes (not ISO): `east_slavic` (Russian/Ukrainian/Belarusia
 ### Hybrid: best quality, biggest GPU
 
 `hybrid-auto-engine` routes each page through either pipeline or VLM depending on content. Best overall quality but highest VRAM footprint — needs 48 GB on dense mixed-content docs.
+
+**Empirical note (Pro-2604 + Cyrillic)**: we A/B-tested `vlm-auto-engine` against `hybrid-auto-engine` on Cyrillic fiscal PDFs (forms with embedded tables and codes) and got **near-identical output** — same Cyrillic transcription, same cell-collision pattern on dense form headers. The Pro-2604 VLM already handles Cyrillic correctly end-to-end; hybrid's layout layer didn't unlock additional accuracy for that content. Hybrid is most useful when **layout disambiguation** (multi-column reading order, complex form structure, mixed text + math + tables) is the bottleneck — not OCR per se. Don't reach for hybrid just because your docs are non-English.
 
 ### HTTP-client backends: split worker from model
 
@@ -209,7 +211,7 @@ The Hub default is intentionally conservative. The full list of RunPod pools tha
 
 | Pool ID | What it contains | Compute | Status with MinerU 2.5 Pro |
 |---|---|---|---|
-| `AMPERE_24` *(default)* | RTX 3090 / RTX A5000, 24 GB | 8.6 | ✅ Tested by us; ~3.5 s/page VLM warm |
+| `AMPERE_24` *(default)* | RTX 3090 / RTX A5000, 24 GB | 8.6 | ✅ Tested by us; ~1–10 s/page VLM warm depending on content density |
 | `ADA_24` *(default)* | RTX 4090, 24 GB | 8.9 | ✅ In default list; same vllm/xformers kernels as Ampere; expected to work |
 | `AMPERE_48` *(default)* | RTX A6000, 48 GB | 8.6 | ✅ In default list; same generation as A5000 |
 | `AMPERE_80` | NVIDIA A100 80 GB | 8.0 | ✅ The GPU MinerU benchmarks against (2.12 fps / ~0.5 s/page upstream). Compute 8.0 fully supported by vllm 0.11.2. Untested by us. |
