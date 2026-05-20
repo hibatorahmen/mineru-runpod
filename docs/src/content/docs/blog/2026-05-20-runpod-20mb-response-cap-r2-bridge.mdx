@@ -105,16 +105,16 @@ Concrete numbers from my 82-page test:
 
 ```python
 result = client.parse_document(
-    file_url="https://pub-....r2.dev/2024.pdf",
+    file_url="https://pub-....r2.dev/report.pdf",
     backend="vlm-auto-engine",
     return_format="s3",
 )
 # result["tarball_url"]            -> presigned R2 URL, valid ~1 h
 # result["tarball_url_expires_in"] -> 3600
-# result["bucket_key"]             -> "2024-15dceac....tar.gz"
+# result["bucket_key"]             -> "report-<hash>.tar.gz"
 
 client.save_s3_tarball(result, "./out/")
-# downloads + extracts -> out/2024.md, out/2024_content_list_v2.json, out/images/, ...
+# downloads + extracts -> out/report.md, out/report_content_list_v2.json, out/images/, ...
 ```
 
 Handler took 211 s for 82 pages: ~112 s of vLLM cold-start absorbed into the first call, then ~92 s of warm parsing (1.1 s/page on an RTX A5000), then ~11 s for the R2 upload (the `package` phase in the debug block). The output extracted to a 313 KB markdown file plus structured JSON plus per-page images. End-to-end client wall: ~3.5 min for a document that previously couldn't return its output at all.
