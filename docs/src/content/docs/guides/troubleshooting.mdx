@@ -1,0 +1,172 @@
+---
+title: Troubleshooting
+description: The most common failure modes — Hub build flakes, Blackwell crashes, OOM, Latin-on-Cyrillic — and how to read the worker's `debug` block to diagnose anything else.
+---
+
+When something doesn't work, the worker tries hard to fail loudly. Every response (success **and** failure) includes a `debug` block with what backend ran, which model loaded, what GPU the worker landed on, and per-phase timings. Start there.
+
+## How to read the `debug` block
+
+```json
+{
+  "debug": {
+    "backend": "vlm-auto-engine",
+    "input_format": "pdf",
+    "model_dir": "/runpod-volume/huggingface-cache/hub/models--opendatalab--MinerU2.5-Pro-2604-1.2B/snapshots/<hash>",
+    "gpu": {
+      "available": true,
+      "name": "NVIDIA RTX 4090",
+      "compute_capability": "8.9",
+      "total_memory_gb": 23.99
+    },
+    "phase_ms": {
+      "fetch_input": 12,
+      "mineru_parse": 18420,
+      "package": 95
+    }
+  }
+}
+```
+
+What to look at:
+
+| Field | What's wrong if it's surprising |
+|---|---|
+| `backend` | The string passed to MinerU. If you set `pipeline` but see `vlm-auto-engine`, your caller isn't sending what you think it is |
+| `input_format` | Auto-detected from bytes. If you uploaded a PDF and see `unknown`, your transport returned an error page (HTML), not the file body |
+| `model_dir` | Filesystem path of the snapshot that actually loaded. `null` here on a 'pipeline' job is fine (pipeline doesn't load a VLM); `null` on a 'vlm-*' job means MinerU didn't cache the model — usually a Cached Models misconfig |
+| `gpu.compute_capability` | 8.6 = Ampere (3090, A5000, A6000), 8.9 = Ada (4090, RTX 6000 Ada), 9.0 = Hopper (H100), 12.0 = **Blackwell — VLM will crash** |
+| `phase_ms.fetch_input` | If hundreds of seconds on a `file_url` job, the source URL is slow / failing |
+| `phase_ms.mineru_parse` | Per-page guidance: ~0.5 s for VLM, ~3–5 s for pipeline. If 10× expected, you're memory-bound and vLLM is swapping |
+
+The worker also prints two lines to stdout — visible in RunPod's worker logs:
+
+```
+[mineru-worker] starting job: backend=vlm-auto-engine lang=en start=0 end=4 gpu=NVIDIA RTX 4090 cc=8.9
+[mineru-worker] done: elapsed=18.4s phase_ms={'fetch_input': 12, 'mineru_parse': 18420, 'package': 95} model_dir=/runpod-volume/.../snapshots/<hash>
+```
+
+On failure:
+
+```
+[mineru-worker] failed: ValueError: input bytes do not match any supported format
+```
+
+## Hub build keeps failing with "Pod could not be created"
+
+**Symptom**: `git push` (or a semantic-release version-bump commit) triggers a RunPod Hub build. The Docker image builds successfully, but the build is marked failed with:
+
+```
+Pod could not be created: This machine does not have the resources to deploy your pod. Please try a different machine.
+```
+
+The worker keeps running the previous image; the new one never propagates.
+
+**Cause**: RunPod's Hub validator spins up a real GPU pod to execute `.runpod/tests.json` after each build. If RunPod can't allocate the `gpuTypeId` named in that file during the build window, the whole build fails — even though the Docker image itself is fine.
+
+**Fix**: this template ships with `.runpod/tests_.json` (underscore suffix) rather than `.runpod/tests.json`. The validator only matches the exact filename, so the test phase is skipped entirely. Image build still runs and is validated. Same pattern as `runpod-workers/worker-comfyui`.
+
+To re-enable testing later, rename back to `.runpod/tests.json` and consider switching `gpuTypeId` from `"NVIDIA RTX A5000"` to `"NVIDIA GeForce RTX 4090"` — 4090 has the highest pool availability across RunPod's regions.
+
+## VLM backend crashes on Blackwell GPUs
+
+**Symptom**: worker logs show successful model load followed by:
+
+```
+compute_capability: 12.0 >= 8.0
+INFO Starting to load model .../MinerU2.5-Pro-2604-1.2B/...
+INFO Model loading took 2.16 GiB and 0.36 seconds
+CUDA error (...flash-attention/hopper/flash_fwd_launch_template.h:188): invalid argument
+```
+
+`debug.gpu.compute_capability` in the response is `12.0`.
+
+**Cause**: xformers/flash-attn in the worker image ships dedicated kernels for Ampere (8.x), Ada (8.9), and Hopper (9.0), but **no Blackwell (12.0) code path** as of vllm 0.11.2. When run on a Blackwell card, xformers misroutes to the Hopper kernel which crashes because Blackwell's ISA differs.
+
+**Fix**: narrow your endpoint's GPU pool to exclude Blackwell. The template default `gpuIds: "AMPERE_24,ADA_24,AMPERE_48"` does this — all unambiguously pre-Blackwell. If you've manually opted into `ADA_48_PRO`, that's where you're getting Blackwell SKUs mixed in. Remove it.
+
+For workloads that need a 48 GB Ada card, use the `pipeline` backend (which doesn't use xformers/flash-attn and runs fine on any GPU) until vllm ships a Blackwell kernel.
+
+See [Choosing a GPU](/runpod-mineru/guides/choosing-gpu/#a-note-on-ada_48_pro-and-blackwell) for the full background.
+
+## VLM backend output is "Latinized" on non-English input
+
+**Symptom**: you parsed a Russian / Arabic / Chinese / Japanese document and the output is gibberish — recognizable structure (headings, tables) but text is transliterated to Latin glyphs that don't form real words.
+
+**Cause**: VLM backends (`vlm-auto-engine`, `vlm-http-client`, plus VLM-routed pages in the hybrid backends) were trained mostly on English + Chinese. They **ignore the `lang` parameter** entirely. On non-Latin scripts the model "best-effort" transliterates to its training-distribution Latin alphabet.
+
+**Fix**: switch to the **pipeline backend** with a **script-family `lang` code** (not an ISO code):
+
+```json
+{
+  "input": {
+    "file_url": "...",
+    "backend": "pipeline",
+    "lang": "east_slavic"   // for Russian; see input-formats guide for full list
+  }
+}
+```
+
+The pipeline backend runs PaddleOCR which has dedicated 109-language script support.
+
+See [Input formats — the `lang` parameter](/runpod-mineru/guides/input-formats/#the-lang-parameter-pipeline-backend-only).
+
+## "Pod scaled to zero" but the next job has a 30-60 s cold start
+
+**Symptom**: spiky workload. First job after a quiet period takes 30–60 s; subsequent jobs in the same window are sub-second.
+
+**Cause**: this is FlashBoot working as intended. RunPod tears down the worker after `idle_timeout` seconds of inactivity. The next request spins a fresh worker — the cost is downloading the image (or restoring the FlashBoot snapshot), loading the model into VRAM, and JIT-compiling vLLM kernels.
+
+**Fix**: not a bug, but levers if it's a problem:
+
+- Bump `idle_timeout` (template default is 10 s) — workers stay warm longer, you pay for that time
+- Set `workers_min=1` — at least one worker is always warm, you pay 24/7 for it
+- Enable RunPod's **FlashBoot** explicitly in the endpoint config (it's on by default for templates from the Hub)
+
+## CUDA out of memory
+
+**Symptom**: handler errors with `CUDA out of memory` mid-parse. `debug.gpu.total_memory_gb` shows your card has fewer GB than the workload needs.
+
+**Cause**: vLLM allocates KV cache upfront based on `gpu_memory_utilization` (default 0.5). On a 24 GB card this targets ~12 GB. If concurrency or document size pushes KV usage above the budget plus model weights (~2.2 GB) plus activations (~0.75 GB), you OOM.
+
+**Fix**:
+- **Bump to a 48 GB pool** for the affected workload (`AMPERE_48`)
+- **Switch to the pipeline backend** which doesn't use vLLM and runs in ~6 GB regardless of doc length
+- **Reduce concurrency** (`concurrencyModifier` on the endpoint) so fewer pages are in flight at once
+- **For one-off huge docs**, set `backend: "pipeline"` per-job — same worker can handle small docs with VLM and giant docs with pipeline
+
+See [Choosing a GPU](/runpod-mineru/guides/choosing-gpu/) for the VRAM math.
+
+## Worker returns `ValueError: input bytes do not match any supported format`
+
+**Symptom**: the response has `ok: false` and the above error message.
+
+**Cause**: the worker's `_detect_format` checked the first ~16 bytes against known magic numbers (`%PDF`, `\x89PNG`, `PK\x03\x04` for OOXML, etc.) and didn't match anything.
+
+Most common reasons:
+
+- **`file_url` returned an HTML error page** instead of the file. The URL is wrong, expired, or behind auth. The response body starts with `<!DOCT` or `<html`.
+- **`file_b64` was double-encoded or not base64**. The decoded bytes are random.
+- **`volume_path` points at a file that exists but isn't a supported format** (e.g. a `.csv` or `.txt`). MinerU doesn't accept plain text — convert to PDF first.
+
+**Fix**: verify the bytes. Download from your `file_url` directly with `curl`, run `file` on the result, or check that `base64 -d < input.b64 | xxd | head` shows the right magic bytes.
+
+## Job times out before the parse finishes
+
+**Symptom**: `MineruClientError: endpoint transport failed: timeout` after some number of seconds (default 900 s in the client, configurable via `timeout=`).
+
+**Cause**: large documents take longer than your client-side `timeout`, or longer than the endpoint's `executionTimeoutMs`.
+
+**Fix**:
+- **Client-side**: pass a larger `timeout` to `parse_document(timeout=3600, ...)`
+- **Endpoint-side**: bump `--execution-timeout` in `deploy.py` (defaults to 900 s). Use `--execution-timeout 3600` for full books.
+- **Per-page math**: VLM ≈ 0.5 s/page, pipeline ≈ 3–5 s/page. A 1000-page book on pipeline = ~3000–5000 s.
+
+## Getting more help
+
+If your symptom isn't here:
+
+1. Pull the worker logs from RunPod's dashboard — look for `[mineru-worker]` lines and any tracebacks
+2. Check the `debug` block in the response
+3. Open a bug report — the [issue template](https://github.com/sergeyshmakov/runpod-mineru/issues/new?template=bug_report.yml) asks for the response and the GPU pool, both of which let you diagnose 90% of issues at a glance
+4. **Parsing accuracy issues** (output is structurally fine but wrong content) belong upstream at [opendatalab/MinerU](https://github.com/opendatalab/MinerU/issues) — they're MinerU's responsibility, not this template's

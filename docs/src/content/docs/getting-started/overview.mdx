@@ -45,6 +45,12 @@ Marker uses Surya as its in-process OCR/layout engine; Surya's weights ship unde
 
 See the [project README](https://github.com/sergeyshmakov/runpod-mineru#how-does-it-compare) for the fully source-cited version of this comparison.
 
+## What it accepts and what comes back
+
+- **Inputs**: PDF, image (PNG/JPEG/GIF/BMP/TIFF/WebP), DOCX, PPTX, XLSX — auto-detected from bytes. Three transports: URL, base64, or a path on a mounted volume. See [Input formats](/runpod-mineru/guides/input-formats/).
+- **Outputs**: Markdown + `content_list` + `middle.json` + extracted images. Three transport modes: base64 tarball, inline fields, or presigned URL to an S3-compatible bucket. See [Output modes](/runpod-mineru/guides/output-modes/).
+- **Backends**: five MinerU backends covering English/Chinese VLM, multilingual pipeline OCR, hybrid auto-routing, and split-tier deploys. See [Picking a backend](/runpod-mineru/guides/choosing-gpu/#picking-a-backend).
+
 ## Next steps
 
 There are two paths from here, depending on whether you want to run the official image as-is or run your own customised build:

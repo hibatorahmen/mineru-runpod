@@ -41,12 +41,12 @@ The worker accepts any of these formats — PDF, image (PNG/JPEG/GIF/BMP/TIFF/We
 |---|---|---|---|
 | `start_page` | int | `0` | 0-based, inclusive |
 | `end_page` | int | `-1` | 0-based, inclusive. `-1` or omitted means "to end of document" |
-| `lang` | string | `"en"` | Language hint, **pipeline backend only** (VLM backends ignore it). Use script-family codes — `east_slavic`, `cyrillic`, `latin`, `arabic`, `devanagari`, `japan`, `korean`, `chinese_cht`, `el`, `th`, etc. 109 languages supported. NOT ISO codes |
+| `lang` | string | `"en"` | Language hint, **pipeline backend only** (VLM backends ignore it). Use script-family codes — `east_slavic`, `cyrillic`, `latin`, `arabic`, `devanagari`, `japan`, `korean`, `chinese_cht`, `el`, `th`, etc. 109 languages supported. NOT ISO codes. See [Input formats](/runpod-mineru/guides/input-formats/#the-lang-parameter-pipeline-backend-only) for the full list. |
 | `backend` | string | `"vlm-auto-engine"` | One of `pipeline` \| `vlm-auto-engine` \| `vlm-http-client` \| `hybrid-auto-engine` \| `hybrid-http-client`. See [Choosing a GPU → Picking a backend](/runpod-mineru/guides/choosing-gpu/#picking-a-backend) |
 | `server_url` | string | `null` | Required for `*-http-client` backends. URL of an external vLLM OpenAI-compatible server (e.g. `https://your-host/v1`) |
 | `formula_enable` | bool | `true` | Extract LaTeX equations |
 | `table_enable` | bool | `true` | Extract structured HTML tables |
-| `return` | string | `"tarball_b64"` | Either `"tarball_b64"` (gzipped tarball of the output dir) or `"inline"` (markdown + content_list + middle + images embedded in the response) |
+| `return` | string | `"tarball_b64"` | `"tarball_b64"` (default, base64-encoded .tar.gz), `"inline"` (markdown + content_list + middle + images embedded in the response), or `"s3"` (upload to a configured S3-compatible bucket and return a presigned URL — requires `BUCKET_*` env vars). See [Output modes](/runpod-mineru/guides/output-modes/) for the trade-offs. |
 | `basename` | string | `"doc"` | Filename stem for output files. Must be alphanumeric with `-` or `_` |
 
 ## Success response

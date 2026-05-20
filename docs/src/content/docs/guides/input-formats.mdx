@@ -1,0 +1,144 @@
+---
+title: Input formats
+description: PDF, image, DOCX, PPTX, XLSX — what the worker accepts, how format detection works, and per-format quirks.
+---
+
+The worker accepts five input formats through the same three transports (`file_url`, `file_b64`, `volume_path`). Format is **auto-detected from the input bytes** — there's no `format` field to set, and the field name `file_*` is intentionally format-agnostic. Send whatever you have; the worker figures out what it is.
+
+## Supported formats
+
+| Format | Magic bytes | Path through MinerU |
+|---|---|---|
+| **PDF** | `%PDF` | Passes straight to `aio_do_parse` |
+| **Image** (PNG / JPEG / GIF / BMP / TIFF / WebP) | `\x89PNG`, `\xff\xd8\xff`, `GIF8`, `BM`, `II*\x00`, `MM\x00*`, `RIFF` | Converted to single-page PDF via `images_bytes_to_pdf_bytes`, then parsed |
+| **DOCX** (Word) | `PK\x03\x04` (ZIP/OOXML) | Parsed via MinerU's `office_docx_analyze` (python-docx) |
+| **PPTX** (PowerPoint) | `PK\x03\x04` | Parsed via `office_pptx_analyze` (python-pptx) |
+| **XLSX** (Excel) | `PK\x03\x04` | Parsed via `office_xlsx_analyze` (openpyxl) |
+
+DOCX / PPTX / XLSX share the same ZIP magic — MinerU's `guess_suffix_by_bytes` inspects the archive's `[Content_Types].xml` to discriminate them downstream.
+
+## What gets returned
+
+The output shape is the same regardless of input format: Markdown + `content_list` + `middle.json` + extracted images. The exact contents differ, but the schema doesn't. A DOCX with a chart and a PDF with the same chart produce comparably structured output.
+
+## When format matters for the backend choice
+
+The five MinerU backends (see [Picking a backend](/runpod-mineru/guides/choosing-gpu/#picking-a-backend)) handle the input pool differently:
+
+- **`vlm-auto-engine`** (default): trained primarily on English + Chinese PDFs. Best for **PDF**. For **images of text**, especially non-Latin scripts, prefer `pipeline`.
+- **`pipeline`**: native multi-language OCR (109 languages). Best for **images** and **scanned PDFs without an embedded text layer**. Respects the `lang` parameter (script-family codes — see below).
+- **`hybrid-auto-engine`**: routes per page. Best when you don't know in advance what mix of layouts you have.
+
+Office formats (DOCX/PPTX/XLSX) are parsed by MinerU's dedicated analysers regardless of which `backend` you set — the choice only affects which engine handles the *embedded* graphics / equations / scanned regions inside the document.
+
+## The `lang` parameter (pipeline backend only)
+
+For non-English/Chinese content, set `backend: "pipeline"` and use a **script-family** code (NOT an ISO language code):
+
+| Script family | Use for |
+|---|---|
+| `east_slavic` | Russian, Ukrainian, Belarusian |
+| `cyrillic` | Serbian, Bulgarian, Macedonian, Mongolian (non-Slavic Cyrillic) |
+| `latin` | French, German, Spanish, Polish, Vietnamese, Indonesian, etc. |
+| `arabic` | Arabic, Persian, Urdu |
+| `devanagari` | Hindi, Marathi, Nepali |
+| `japan` | Japanese (kanji + kana) |
+| `korean` | Korean (hangul) |
+| `chinese_cht` | Traditional Chinese |
+| `el` | Greek |
+| `th` | Thai |
+| `ta`, `te`, `ka` | Tamil, Telugu, Kannada |
+| `ch`, `ch_server`, `ch_lite`, `en` | Variants of Chinese / English defaults |
+
+The VLM backends (`vlm-*`, `hybrid-*` with VLM routing) **ignore the `lang` field**. Passing `lang: "east_slavic"` with `backend: "vlm-auto-engine"` does nothing — you'll get Latin-transliterated nonsense on Cyrillic input. This is one of the most common silent failures; see the [Troubleshooting guide](/runpod-mineru/guides/troubleshooting/#vlm-backend-output-is-latinized-on-non-english-input).
+
+## Examples
+
+### PDF (English)
+
+```json
+{
+  "input": {
+    "file_url": "https://example.com/report.pdf"
+  }
+}
+```
+
+Default `backend: "vlm-auto-engine"`, `lang: "en"` — both ignored for non-Latin VLM input.
+
+### Cyrillic scan (Russian)
+
+```json
+{
+  "input": {
+    "file_url": "https://example.com/russian-scan.pdf",
+    "backend": "pipeline",
+    "lang": "east_slavic"
+  }
+}
+```
+
+Required combination. Without `backend: "pipeline"`, the VLM transliterates Cyrillic to nearest-Latin glyphs.
+
+### Scanned image (PNG)
+
+```json
+{
+  "input": {
+    "file_url": "https://example.com/page-scan.png",
+    "backend": "pipeline",
+    "lang": "latin"
+  }
+}
+```
+
+Image is converted to a single-page PDF internally, then routed through pipeline OCR.
+
+### DOCX with native text + embedded equations
+
+```json
+{
+  "input": {
+    "file_url": "https://example.com/spec.docx",
+    "formula_enable": true
+  }
+}
+```
+
+Office parser extracts native text and structure; embedded equation/image regions are sent to the chosen `backend` for parsing.
+
+### XLSX (spreadsheet)
+
+```json
+{
+  "input": {
+    "file_url": "https://example.com/data.xlsx"
+  }
+}
+```
+
+Returns Markdown tables (one per sheet) in `content_list`.
+
+## Size limits
+
+| Transport | Max input size |
+|---|---|
+| `file_b64` (inline) | 20 MB (RunPod gateway cap on `/runsync`; 10 MB on `/run`) |
+| `file_url` | No hard cap; the worker downloads with a 120 s timeout |
+| `volume_path` | No hard cap; only limited by the network volume's free space |
+
+For multi-hundred-MB books or large image archives, prefer `file_url` (signed S3 URL is cheapest) or pre-stage on a network volume — see [Network volumes](/runpod-mineru/guides/network-volumes/).
+
+## Page selection (PDF only)
+
+The `start_page` / `end_page` fields apply to PDFs (including images converted to single-page PDFs). For DOCX/PPTX/XLSX, page-range semantics are interpreted by MinerU's Office parsers — they generally process the whole document and `start_page` / `end_page` are best-effort.
+
+## Format detection edge cases
+
+If `_detect_format` returns `"unknown"` (the bytes don't match any known magic), the worker raises:
+
+```
+ValueError: input bytes do not match any supported format (PDF, PNG/JPEG/GIF/BMP/TIFF/WebP image, or DOCX/PPTX/XLSX). Check that file_b64 was base64-encoded correctly and that file_url returned the file body (not an error page).
+```
+
+Most common cause is `file_url` returning an HTML error page (e.g. a 403 from an S3 bucket with expired credentials). The first 16 bytes of the response will start with `<!DOCT` or `<html` — neither of which is in our magic table.

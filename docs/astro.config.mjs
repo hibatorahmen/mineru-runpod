@@ -48,7 +48,13 @@ export default defineConfig({
 				},
 				{
 					label: "Guides",
-					items: ["guides/choosing-gpu"],
+					items: [
+						"guides/choosing-gpu",
+						"guides/input-formats",
+						"guides/output-modes",
+						"guides/network-volumes",
+						"guides/troubleshooting",
+					],
 				},
 				{
 					label: "Reference",

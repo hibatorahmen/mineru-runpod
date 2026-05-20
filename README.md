@@ -14,6 +14,10 @@ Serverless [MinerU](https://github.com/opendatalab/MinerU) PDF parser on [RunPod
 
 ## 30-second taste
 
+Pick your transport. Either of these works.
+
+**Python (`mineru_client`):**
+
 ```python
 from mineru_client import MineruClient
 
@@ -23,7 +27,16 @@ client.save_tarball(result, "./out/doc")
 # → markdown + content_list + middle.json + images
 ```
 
-Accepts PDF, image (PNG/JPEG/GIF/BMP/TIFF/WebP), DOCX, PPTX, XLSX.
+**curl (no SDK):**
+
+```sh
+curl -X POST "https://api.runpod.ai/v2/<endpoint-id>/runsync" \
+  -H "Authorization: Bearer $RUNPOD_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"input":{"file_url":"https://example.com/report.pdf","end_page":4,"return":"inline"}}'
+```
+
+Accepts PDF, image (PNG/JPEG/GIF/BMP/TIFF/WebP), DOCX, PPTX, XLSX. Three return modes: `tarball_b64` (default), `inline`, or `s3` (presigned URL for outputs that would exceed RunPod's ~20 MB response cap — requires `BUCKET_*` env vars on the endpoint).
 
 ## Why this exists
 
@@ -59,6 +72,30 @@ result = endpoint.run_sync({"input": {"file_url": "https://example.com/report.pd
 ```
 
 Prototype with A; switch to B once you need async, retries, or multi-language callers. See [Clients](https://sergeyshmakov.github.io/runpod-mineru/getting-started/clients/) for the full comparison.
+
+## API at a glance
+
+Full reference: [docs site](https://sergeyshmakov.github.io/runpod-mineru/reference/api/) and the docstring atop [`handler.py`](handler.py). Summary table:
+
+| Field | Required | Default | Notes |
+|---|---|---|---|
+| `file_url` / `file_b64` / `volume_path` | exactly one | — | Public URL, base64 bytes, or container path. Worker auto-detects format. |
+| `start_page` | no | `0` | 0-based inclusive (PDF only) |
+| `end_page` | no | `-1` | 0-based inclusive; `-1` = end of doc |
+| `lang` | no | `"en"` | Pipeline backend only. Script-family code: `east_slavic`, `cyrillic`, `latin`, `arabic`, `devanagari`, `japan`, `korean`, etc. |
+| `backend` | no | `"vlm-auto-engine"` | `pipeline` / `vlm-auto-engine` / `vlm-http-client` / `hybrid-auto-engine` / `hybrid-http-client` |
+| `server_url` | iff `*-http-client` | — | URL of an external vLLM OpenAI-compatible server |
+| `formula_enable` / `table_enable` | no | `true` | Extract LaTeX / structured HTML tables |
+| `return` | no | `"tarball_b64"` | `"tarball_b64"` / `"inline"` / `"s3"` |
+| `basename` | no | `"doc"` | Filename stem; alphanumeric + `-_` |
+
+Success response always includes `ok=true`, `elapsed_seconds`, `pages_processed`, `mineru_version`, `source`, and a `debug` block (`backend`, `input_format`, `model_dir`, `gpu`, `phase_ms`). Output payload depends on `return`:
+
+- `"tarball_b64"` → `tarball_b64` (base64 .tar.gz)
+- `"inline"` → `markdown` + `content_list` + `middle` + `images` (each value base64)
+- `"s3"` → `tarball_url` (presigned, ~1 h) + `tarball_url_expires_in` + `bucket_key`
+
+Errors: top-level `error` + `ok=false` + `traceback` + the same `debug` block.
 
 ## How does it compare?
 
