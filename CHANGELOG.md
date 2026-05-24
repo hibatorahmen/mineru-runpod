@@ -1,3 +1,9 @@
+## [1.1.20](https://github.com/sergeyshmakov/mineru-runpod/compare/v1.1.19...v1.1.20) (2026-05-24)
+
+### Bug Fixes
+
+* add symlink to handler.py ([bf9be39](https://github.com/sergeyshmakov/mineru-runpod/commit/bf9be3913caad5a62f8decc93fca05bc01d373bb))
+
 ## [1.1.19](https://github.com/sergeyshmakov/mineru-runpod/compare/v1.1.18...v1.1.19) (2026-05-24)
 
 ### Bug Fixes
