@@ -1,3 +1,9 @@
+## [1.1.19](https://github.com/sergeyshmakov/mineru-runpod/compare/v1.1.18...v1.1.19) (2026-05-24)
+
+### Bug Fixes
+
+* readme badge update ([a1236f2](https://github.com/sergeyshmakov/mineru-runpod/commit/a1236f254cc24c8b50abf91ecac616cf8c5440ec))
+
 ## [1.1.18](https://github.com/sergeyshmakov/mineru-runpod/compare/v1.1.17...v1.1.18) (2026-05-24)
 
 ### Bug Fixes
