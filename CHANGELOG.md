@@ -1,3 +1,9 @@
+## [1.1.24](https://github.com/sergeyshmakov/mineru-runpod/compare/v1.1.23...v1.1.24) (2026-05-24)
+
+### Bug Fixes
+
+* trying exactly recommended readme badge to fix runpod hub publishing workflow ([1bf1ce5](https://github.com/sergeyshmakov/mineru-runpod/commit/1bf1ce542f533a2684059b7f884dc097a242d93d))
+
 ## [1.1.23](https://github.com/sergeyshmakov/mineru-runpod/compare/v1.1.22...v1.1.23) (2026-05-24)
 
 ### Bug Fixes
