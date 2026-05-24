@@ -1,3 +1,9 @@
+## [1.1.22](https://github.com/sergeyshmakov/mineru-runpod/compare/v1.1.21...v1.1.22) (2026-05-24)
+
+### Bug Fixes
+
+* add icon to hub.json ([40d5ff8](https://github.com/sergeyshmakov/mineru-runpod/commit/40d5ff8faab9ecf3c37c8642a2a2dbffe045f912))
+
 ## [1.1.21](https://github.com/sergeyshmakov/mineru-runpod/compare/v1.1.20...v1.1.21) (2026-05-24)
 
 ### Bug Fixes
