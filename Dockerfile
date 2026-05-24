@@ -85,10 +85,10 @@ RUN HF_HUB_OFFLINE=0 TRANSFORMERS_OFFLINE=0 python3 -c "from huggingface_hub imp
 # model-cache layers.
 COPY handler.py /worker/handler.py
 
-# Tiny fixture PDF used by the RunPod Hub validation tests (.runpod/tests.json
-# references /worker/test-fixture.pdf). Tiny (<1 KB) so it adds nothing to the
-# image and gives Hub a real document to round-trip on submission.
-COPY .runpod/test-fixture.pdf /worker/test-fixture.pdf
+# Tiny fixture PDF used by local smoke input and optional Hub tests. It is
+# copied into /worker/test-fixture.pdf so validations can round-trip a real
+# document without adding meaningful image size.
+COPY .runpod-disabled/test-fixture.pdf /worker/test-fixture.pdf
 
 # RunPod's serverless runtime invokes Python directly. `python3` is what
 # vllm/vllm-openai ships on PATH; `python` is not always aliased.
