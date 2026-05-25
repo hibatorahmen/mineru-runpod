@@ -170,6 +170,33 @@ def test_validate_input_accepts_s3_return():
     assert cleaned["return"] == "s3"
 
 
+def test_validate_input_rejects_unknown_backend():
+    with pytest.raises(ValueError, match="backend must be one of"):
+        handler._validate_input({"file_b64": "AA==", "backend": "magic-engine"})
+
+
+def test_validate_input_http_client_requires_server_url():
+    with pytest.raises(ValueError, match="server_url"):
+        handler._validate_input({"file_b64": "AA==", "backend": "vlm-http-client"})
+
+
+# -----------------------------------------------------------------------------
+# probe mode — bypasses MinerU and dumps filesystem layout.
+# -----------------------------------------------------------------------------
+
+def test_handler_probe_mode_returns_filesystem_dump():
+    result = asyncio.run(handler.handler({"input": {"probe": True}}))
+    assert result["ok"] is True
+    assert "probe" in result
+    assert "env" in result["probe"]
+    assert "paths" in result["probe"]
+    assert "models_found" in result["probe"]
+    # Surfaces the MinerU availability flag so a busted import doesn't hide
+    # behind a happy ok=true probe response.
+    assert "mineru_available" in result
+    assert isinstance(result["mineru_available"], bool)
+
+
 # -----------------------------------------------------------------------------
 # _package_s3 — env-var validation only; the actual upload requires boto3 +
 # a live S3 endpoint and is not exercised here.
