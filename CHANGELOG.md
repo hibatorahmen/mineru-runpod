@@ -1,3 +1,9 @@
+## [1.2.2](https://github.com/sergeyshmakov/mineru-runpod/compare/v1.2.1...v1.2.2) (2026-05-25)
+
+### Bug Fixes
+
+* speedup models download with hf xet ([a940a6c](https://github.com/sergeyshmakov/mineru-runpod/commit/a940a6ce9e726e0f86230616ea36df91377716b4))
+
 ## [1.2.1](https://github.com/sergeyshmakov/mineru-runpod/compare/v1.2.0...v1.2.1) (2026-05-25)
 
 ### Bug Fixes
