@@ -1,3 +1,9 @@
+## [1.3.0](https://github.com/sergeyshmakov/mineru-runpod/compare/v1.2.6...v1.3.0) (2026-05-26)
+
+### Features
+
+* add worker warmup ([348b1dc](https://github.com/sergeyshmakov/mineru-runpod/commit/348b1dc240e63bacbd8890e636f0a20216973270))
+
 ## [1.2.6](https://github.com/sergeyshmakov/mineru-runpod/compare/v1.2.5...v1.2.6) (2026-05-26)
 
 ### Bug Fixes
