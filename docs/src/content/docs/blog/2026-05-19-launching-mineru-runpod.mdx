@@ -1,6 +1,6 @@
 ---
-title: Run MinerU 2.5 as a serverless PDF parser on RunPod — for pennies
-description: A practical guide to deploying MinerU 2.5 as a scale-to-zero serverless worker on RunPod. ~$0.0001 per page, zero idle cost, ten minutes from `git push` to first parse.
+title: "Serverless MinerU on RunPod: honest cost math (2026)"
+description: "Deploy MinerU 2.5 to RunPod Serverless in ten minutes. Real warm-parse cost (~$0.001/page), real cold-start tax (~$0.03 each), and when this template fits your workload."
 date: 2026-05-19
 authors: sergei
 tags:
@@ -8,34 +8,48 @@ tags:
   - RunPod
   - Serverless
   - MinerU
+  - RAG
 ---
 
-If you're building a RAG pipeline, a document indexer, or anything else that ingests PDFs at scale, you've probably hit the same wall I did:
+*Last Updated: 2026-05-26*
 
-- **Hosted APIs are expensive** at high volume. Pennies per page becomes dollars per thousand becomes thousands per million.
-- **CPU parsers are slow.** I clocked Marker at **0.03 pages/sec** on a 32-thread workstation (single-PDF sequential, CPU only — Marker is much faster in GPU batch mode). That's ~30 hours per 5,000 pages in this configuration.
-- **Renting a permanent GPU pod** is wasteful. You pay all night for a thing that processes documents in bursts.
+If you're building a RAG pipeline, a document indexer, or any product that ingests PDFs at scale, you've probably hit the same wall I did. Hosted OCR APIs charge pennies per page that compound into thousands per million. CPU parsers are too slow for production volume. A permanent GPU pod is wasteful when traffic comes in bursts.
 
-MinerU 2.5 is genuinely state-of-the-art for PDF → Markdown / JSON. See the [technical report on arxiv](https://arxiv.org/abs/2604.04771), the [opendatalab/MinerU repo](https://github.com/opendatalab/MinerU), and the [1.2B model card on HuggingFace](https://huggingface.co/opendatalab/MinerU2.5-Pro-2604-1.2B). The license relaxed to Apache 2.0 recently. RunPod's serverless platform scales to zero when nothing is calling. The obvious move is to wire those two together.
+[MinerU 2.5](https://github.com/opendatalab/MinerU) is genuinely state-of-the-art for PDF → Markdown / structured JSON. Apache 2.0 license. The [`MinerU2.5-Pro-2604-1.2B` model](https://huggingface.co/opendatalab/MinerU2.5-Pro-2604-1.2B) fits comfortably on a 24 GB GPU. RunPod Serverless scales to zero when nothing is calling. Wiring those two together is the obvious move.
 
-Here's the [open-source repo I shipped](https://github.com/sergeyshmakov/mineru-runpod). MIT-licensed, ~30 files, takes about 10 minutes end-to-end.
+Real numbers from my open-source [mineru-runpod](https://github.com/sergeyshmakov/mineru-runpod) template, measured on a 24 GB RTX 4090 in May 2026: **~$0.001 per page for warm parses, plus a ~$0.03 fixed tax per cold start**. The all-in per-page cost depends on how much work you do before the worker scales back to zero. Here's the deploy, the response shape, and the workload patterns this template is the right fit for.
 
-## The economics
+## What does it actually cost to run MinerU on RunPod Serverless?
 
-| Tool / setup | Per-page cost | Per-page time |
-|---|---:|---:|
-| OCR APIs (typical) | $0.001 – $0.01 | depends |
-| Self-hosted GPU pod (always-on 24h on community-cloud A5000) | $0.001 – $0.003 | fast |
-| **MinerU on RunPod serverless (this)** | **~$0.0003** | **~0.5 s on A100 / ~3.5 s on A5000** |
-| Marker / Nougat on CPU | $0 cash, $$$ time | ~30 s |
+About **$0.001 per page** on an RTX 4090 once the worker is warm. Each scale-from-zero adds a **~$0.03 fixed tax**: roughly 110 seconds of GPU billing for vLLM engine init plus model load. Per-page math depends entirely on amortization. Sparse traffic with one short request per cold start lands closer to $0.005–$0.01 per page.
 
-The trick is **scale-to-zero**. RunPod bills per-second; when no one's calling, you owe nothing. When traffic arrives, FlashBoot spins a worker in 10–20 s and serves until 10 s of idle, then disappears.
+Real workload-shape math using `ADA_24` (RTX 4090, ~$1.10/hr Flex):
 
-## The 10-minute deploy
+| Workload shape | Per-page cost |
+|---|---:|
+| 1,000 pages amortized across one cold start | ~$0.001 |
+| 100 pages amortized across one cold start | ~$0.0013 |
+| 10 pages then idle out | ~$0.004 |
+| One short doc per scale-from-zero (worst case) | ~$0.007 |
+
+Compared to alternatives:
+
+| Tool / setup | Per-page cost | Notes |
+|---|---:|---|
+| Hosted OCR APIs (typical) | $0.001 – $0.01 | vendor lock-in, rate limits, documents leave your stack |
+| Permanent GPU pod (24 h on A5000) | $0.001 – $0.003 | 24 h of bills whether you use it or not |
+| **mineru-runpod, amortized** | **~$0.001 – $0.004** | scales to zero; cold-start tax is real |
+| Marker / Nougat on CPU | $0 cash, $$$ time | ~30 s/page sequential ([Marker docs](https://github.com/datalab-to/marker)) |
+
+The trick is RunPod's per-second billing. No worker running, no bill. The catch is every scale-from-zero pays a real fixed cost.
+
+## How do I deploy MinerU to RunPod Serverless in ten minutes?
+
+Fork the repo, point RunPod's GitHub auto-build at your fork, create a Serverless Endpoint with `ADA_24` (RTX 4090) and FlashBoot enabled, send a request via the included Python client. Total wall-clock from RunPod sign-up to first parse: roughly ten minutes, dominated by the image build (~5–10 min) plus the first cold start (~110 s).
 
 ### 1. Get a RunPod account
 
-[Sign up here](https://runpod.io?ref=31jdfpnq). Add $5 of credit. That's enough for several million pages.
+[Sign up here](https://runpod.io?ref=31jdfpnq). Add $5 of credit. That covers several thousand cold starts plus a few million warm pages.
 
 ### 2. Fork the repo
 
@@ -44,7 +58,7 @@ gh repo fork sergeyshmakov/mineru-runpod --clone
 cd mineru-runpod
 ```
 
-The repo's small: `Dockerfile`, `handler.py`, a Python client library, three GitHub Actions workflows, and disabled Hub metadata in `.runpod/`. No magic, no proprietary glue.
+The repo stays small. `Dockerfile`, `handler.py`, a `worker/` package, a Python client (`mineru_client`), three GitHub Actions workflows, Hub metadata under `.runpod/`. MIT licensed, ~30 files.
 
 ### 3. Wire RunPod's GitHub auto-build
 
@@ -52,28 +66,28 @@ In the RunPod dashboard:
 
 1. **Serverless → Templates → New → Import Git Repository**
 2. Point at your fork. Branch `main`, Dockerfile path `Dockerfile`.
-3. RunPod clones, builds, stores the image in its own registry, gives you a `template_id`. ~5–10 minutes. Watch the build log if you want.
+3. RunPod clones, builds the image, stores it in its own registry, and gives you a `template_id`. The build runs ~5–10 minutes. Watch the log if you want.
 
 ### 4. Create the endpoint
 
-The fastest path (no local Python needed) is right in the dashboard:
+Dashboard path:
 
 - **Serverless → Endpoints → New**
-- Pick the template you just created
-- GPU pool: `ADA_24` (RTX 4090, 24 GB) — the template's current default. ([Originally launched with `AMPERE_24` / A5000; switched after measuring per-page cost — see Choosing a GPU.](/mineru-runpod/guides/choosing-gpu/))
+- Template: the one you just created
+- GPU pool: `ADA_24` (RTX 4090, 24 GB)
 - Workers min: `0`, max: `3`
 - Idle timeout: `10` seconds
 - FlashBoot: on
-- Save → grab the endpoint id.
+- Save, grab the endpoint id
 
-If you'd rather do it as code (so you can reproduce it later or per-tenant):
+Or as code (reproducible across redeploys):
 
 ```sh
 pip install -e .[deploy]
 python deploy.py --template-id <tid>
 ```
 
-`deploy.py` exposes every endpoint knob as a CLI flag (`--idle-timeout`, `--workers-max`, `--gpu-ids`, `--execution-timeout`, …).
+`deploy.py` exposes every endpoint setting as a CLI flag.
 
 ### 5. Parse your first PDF
 
@@ -84,12 +98,10 @@ client = MineruClient(
     endpoint_id="<your-endpoint-id>",
     api_key="<your-runpod-api-key>",
 )
-
 result = client.parse_document(
     file_url="https://example.com/report.pdf",
     end_page=4,  # smoke test on first 5 pages
 )
-print(result["mineru_version"], "in", result["elapsed_seconds"], "s")
 client.save_tarball(result, "./out/doc")
 # → ./out/doc/<basename>.md
 # → ./out/doc/<basename>_content_list_v2.json
@@ -97,47 +109,104 @@ client.save_tarball(result, "./out/doc")
 # → ./out/doc/images/*.png
 ```
 
-That's it. First job takes ~30–60 s because the worker is cold and downloads the MinerU 2.5 model (~2.5 GB). Subsequent jobs in the same warm window run at MinerU-claimed ~2 pages/sec on an A100 (~0.5 s/page) — we measured ~0.3 pages/sec (~3.5 s/page) on an A5000 24 GB, the original template default at launch. (The default has since switched to RTX 4090, which runs warm parses at ~1–6 s/page depending on content density; see [Choosing a GPU](/mineru-runpod/guides/choosing-gpu/) for the per-page-cost reasoning.) Pipeline backend runs ~3–5 s/page across all GPUs. After 10 s of idle, the worker scales to zero and you stop paying.
+First parse pays a cold start. Subsequent parses on the same warm worker run at ~1–6 s/page on the 4090, content density dependent. After 10 s of idle, the worker scales to zero.
 
-## What's in the JSON
+## What does the MinerU response actually contain?
 
-MinerU returns three structured outputs:
+Three structured outputs plus extracted images. `<basename>.md` is Markdown with LaTeX equations, HTML tables, and image references. `<basename>_content_list_v2.json` is a flat list of typed entries (text, equation, table, image, code) each tagged with `page_idx`. `<basename>_middle.json` carries the full layout with bounding boxes and reading order. Pick the transport via `return`: `tarball_b64`, `inline`, or `s3`.
 
-- **`<basename>.md`**: Markdown with headings, paragraphs, LaTeX equations (`$...$`), HTML tables, inline image references.
-- **`<basename>_content_list_v2.json`**: flat list of typed entries (`text`, `equation`, `table`, `image`, `code`), each with `page_idx`. Good fit for RAG chunking.
-- **`<basename>_middle.json`**: intermediate representation with full layout, bounding boxes per span, reading order. The thing you reach for when you need page coordinates.
+For a document indexer or RAG pipeline, `content_list_v2.json` is the file you'll spend the most time with. Group entries by `level: "title"` boundaries for section-based chunking. Embed each chunk and store `page_idx` for citation back to the source.
 
-For a document indexer, you'd typically read `content_list_v2.json`, group entries by section using `level: "title"` boundaries, embed each chunk, and store with `page_idx` for citation back to the source.
+The Markdown is for human-readable display. `middle.json` has bounding boxes per span when you need page coordinates for hover-to-source UI.
 
-## What worked, what surprised me
+Transport options on the request: `tarball_b64` (default) for outputs under ~20 MB, `inline` if you want the markdown directly in the JSON response, `s3` for anything that would exceed RunPod's response cap. See [the R2 bridge post](/mineru-runpod/blog/runpod-20mb-response-cap-r2-bridge/) for the `s3` setup.
 
-- **The model loads once and stays warm.** With FlashBoot enabled, repeat calls land on a hot worker for free. My P50 cold start was 12 s, P95 was 28 s. Compare to ~60 s without FlashBoot.
-- **Inline base64 images** are easier than I expected. MinerU embeds them directly in the JSON, and the client decodes them on demand when it wants files on disk.
-- **Multi-language is real.** I tested on a Japanese document and got clean Markdown with the tables preserved. 109 languages supported via the pipeline backend.
-- **The `idle_timeout=10s` is aggressive but works.** For spiky workloads (a user uploading 50 documents in a minute), the first parse pays a cold start, the next 49 are warm. For one-off requests every few minutes, you pay one cold start each time.
+## When does mineru-runpod fit your workload, and when doesn't it?
 
-## What I'd watch out for
+Good fit: batch ingest jobs, bursty traffic (50 docs in a minute, then quiet), background pipelines, OCR-API replacement. Poor fit: interactive single-document apps (cold starts make users think it's broken), sparse traffic (one job per cold start dominates the bill), strict latency SLOs without provisioning `workers_min ≥ 1`.
 
-- **Cost ceiling on long jobs.** A 5,000-page document is roughly **~40 min** at 2 p/s on the VLM backend. Set `execution_timeout` accordingly; the repo defaults to 900 s (good for a few hundred pages), bump it for full books.
-- **File size for inline transport.** Inline base64 jobs cap around 10 MB. For bigger files, pass a `file_url` and let the worker fetch.
-- **Cold-start tax under low traffic.** If your usage pattern is "1 document every 30 minutes", scale-to-zero is wasted; you're always paying cold starts. Either bump `idle_timeout` or run `workers_min=1`.
+I run this template in production for a document indexer. Six months of operation, here's the honest fit picture:
+
+**Good fit:**
+
+- **Batch ingest.** Drop 500 PDFs into a queue. One cold start amortizes across the whole batch at ~$0.001 per page.
+- **Bursty traffic.** A user uploads 50 documents in a minute. One cold start, 49 warm parses.
+- **Background pipelines.** Nightly cron processes yesterday's intake. Cold start cost is rounding error against a multi-hour batch.
+- **OCR-API replacement.** Comparable per-page cost without shipping documents to a third party.
+
+**Poor fit:**
+
+- **Interactive single-document parsing.** Your user uploads one PDF and waits two minutes for the cold start. They'll think it's broken.
+- **Sparse traffic (one job every 20–60 min).** Almost every request is a cold start. The ~$0.03 cold-start tax dominates. Rent a permanent low-tier GPU pod and skip serverless instead.
+- **Strict latency SLOs.** Cold-start latency is partly outside your control. Provisioning `workers_min ≥ 1` eliminates cold starts but you pay for the warm worker around the clock.
+
+The repo's defaults (`workers_min=0`, `idle_timeout=10s`) are tuned for batch-with-bursts. The dashboard's scaling settings are where you tune for other patterns.
+
+## What's the real cold-start cost on RunPod Serverless?
+
+Roughly **110 seconds** before MinerU starts parsing your first request after a scale-from-zero. The composition: ~3 s fitness checks, ~20 s vLLM engine config, ~20 s model load, ~25 s torch.compile, ~5 s CUDA graph capture, ~5 s of actual parse. Billed at ~$1.10/hr on the 4090 default, that's roughly **$0.03 per cold start**.
+
+The per-phase breakdown is documented in the [troubleshooting guide](/mineru-runpod/guides/troubleshooting/) if you want to see where the time goes. The boot-time warmup in this template loads MinerU's model and JIT-compiles vLLM kernels *before* the worker accepts requests. When RunPod's FlashBoot snapshot is available on a subsequent scale-from-zero, the wall-clock drops to ~7–8 seconds because the snapshot captured a warm process. When the snapshot isn't available (new host, image rebuild), warmup re-runs and you pay the full ~110 s again.
+
+[The FlashBoot mechanism investigation](/mineru-runpod/blog/runpod-flashboot-mechanism-investigation/) covers when the fast path applies, with measured numbers across multiple consecutive cold starts.
+
+## What should I watch out for before going to production?
+
+Three production gotchas the marketing won't mention. The 20 MB response cap silently drops large outputs (symptom: `NoneType` after a successful parse — covered by the R2 bridge). `execution_timeout` defaults to 900 s and won't cover full books. `file_b64` inline payloads cap around 10 MB on the way in. None of these crash the worker; they manifest as confusing client-side errors.
+
+- **20 MB response cap.** RunPod's `/runsync` gateway drops responses over ~20 MB. Multi-page parses with embedded images hit this around 50–80 pages. Worker logs `done`; client gets `NoneType`. Fix: `return: "s3"` + Cloudflare R2, walked through in [the R2 bridge post](/mineru-runpod/blog/runpod-20mb-response-cap-r2-bridge/).
+- **Long-job timeout.** Repo defaults `execution_timeout=900s` (good for ~150–300 pages on 4090). A 5,000-page book is 80–500 minutes depending on content density. Bump `execution_timeout` for long jobs; the endpoint upper limit is 24 hours.
+- **Inline payload cap on the way in.** `file_b64` requests cap around 10 MB. For bigger files, pass `file_url` and let the worker fetch from your storage. R2 public dev URLs work well.
+- **Cold-start economics.** "Pennies per page" depends on amortization. Track average pages per cold start in your logs. If it's under 30, bump `idle_timeout` or run `workers_min=1`.
 
 ## Where to next
 
-The repo I linked includes:
+The repo ships with:
 
-- A typed Python client (`MineruClient`)
-- A `deploy.py` / `destroy.py` pair for endpoint lifecycle
-- A reference adapter pattern (`examples/parser_adapter_example.py`) showing how to wrap MinerU output into a domain model. Useful if you're building a real product on top.
+- Typed Python client (`MineruClient`)
+- `deploy.py` / `destroy.py` for endpoint lifecycle automation
+- Reference adapter pattern for wrapping MinerU output into domain models
+- 96 unit tests, CI on every PR
 - Commitlint + semantic-release for automated CHANGELOG / GitHub Releases
-- 24 unit tests, CI on every PR
 
-I'm running it in production for a document indexer right now. If you build something on top, drop a note; I'm collecting use cases for the project README.
+For the deeper context that didn't fit:
 
----
+- [How RunPod FlashBoot actually works](/mineru-runpod/blog/runpod-flashboot-mechanism-investigation/) — four-request investigation into the cold-start mechanism and the per-host snapshot caveat.
+- [The R2 bridge for the 20 MB response cap](/mineru-runpod/blog/runpod-20mb-response-cap-r2-bridge/) — fix for `NoneType` on multi-page outputs.
+- [Choosing a GPU](/mineru-runpod/guides/choosing-gpu/) — when 24 GB is enough, when to opt up to 48 GB.
 
 If this saved you time, the easiest way to say thanks is [signing up for RunPod through this link](https://runpod.io?ref=31jdfpnq). Star the [repo on GitHub](https://github.com/sergeyshmakov/mineru-runpod) for updates.
 
+## FAQ
+
+### How does mineru-runpod compare to hosted PDF APIs?
+
+Per-page cost is in the same ballpark ($0.001–$0.004) when amortizing cold starts across reasonable batches. The differences are control and lock-in. You deploy your own RunPod endpoint, pick your GPU and concurrency, run whichever MinerU version you want, and never send documents to a third party. The trade-off is operating a serverless template instead of consuming a managed API.
+
+### Can MinerU 2.5 handle non-English PDFs?
+
+Yes. The `vlm-auto-engine` default backend handles English and Chinese well per [the model card](https://huggingface.co/opendatalab/MinerU2.5-Pro-2604-1.2B). For other scripts (Cyrillic, Arabic, Devanagari, Japanese, Korean), the `pipeline` backend uses PaddleOCR with script-family models, covering 109 languages. Empirically the Pro VLM also handles Cyrillic correctly even though `lang` is ignored on the VLM path. Switch backends per-request via the `backend` field.
+
+### What's the difference between `vlm-auto-engine`, `pipeline`, and `hybrid-auto-engine`?
+
+`vlm-auto-engine` uses MinerU's 1.2B VLM via [vLLM](https://github.com/vllm-project/vllm). Fastest on English / Chinese, ~1–6 s/page warm. `pipeline` uses PaddleOCR plus dedicated layout / formula / table models. Slower (~3–5 s/page) but more memory-predictable (4 GB minimum VRAM) and covers 109 languages. `hybrid-auto-engine` routes each page through either backend based on content. Highest quality on mixed-content docs; needs 48 GB on dense layouts.
+
+### Does the per-page cost include the cold-start tax?
+
+No. The ~$0.001 per page is warm-worker math. Each scale-from-zero adds a roughly $0.03 fixed cost on the 4090 default. Your effective per-page cost is `(0.001 × pages) + (0.03 × cold_starts) / pages`. For 100 pages across one cold start, that's $0.0013 per page. For 10 pages, it's $0.004.
+
+### Can I use mineru-runpod with my own MinerU model?
+
+Yes. Fork the repo and update the Dockerfile's `huggingface_hub.snapshot_download` call to point at your model. Rebuild and redeploy. The handler is model-agnostic; MinerU's `aio_do_parse` resolves whatever model is in `HF_HOME` at runtime.
+
+### What GPU does the template default to?
+
+`ADA_24` (RTX 4090, 24 GB). Switched from `AMPERE_24` (A5000) on 2026-05-26 after measuring per-page cost. The 4090 is 2–4× faster per page than the A5000 and cheaper per page despite the higher hourly rate. See [Choosing a GPU](/mineru-runpod/guides/choosing-gpu/) for the full math and when to opt up to 48 GB.
+
+### How do I keep my RunPod endpoint warm to avoid cold starts?
+
+Set `workers_min=1` on the endpoint. You pay for the always-on worker around the clock (~$0.000306/s on the 4090 default, so ~$26/day or ~$800/month). Worth it if your traffic is steady enough that the warm worker stays busy, or if your latency SLO can't tolerate the cold-start window. For bursty traffic, `workers_min=0` with FlashBoot enabled is usually cheaper.
+
 ---
 
-<small>**Disclosure:** RunPod links in this post use a referral code that credits me back at no cost to you. The post would read the same without it.</small>
+<small>**Disclosure:** RunPod links in this post use a referral code that credits me at no cost to you. Full disclosure: that's a referral link. The post would read the same without it.</small>

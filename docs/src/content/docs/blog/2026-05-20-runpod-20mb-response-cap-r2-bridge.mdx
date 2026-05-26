@@ -1,6 +1,6 @@
 ---
-title: "RunPod's 20 MB Response Cap: How to Fix It with R2"
-description: "RunPod's /runsync gateway caps responses at 20 MB. Worker logs say done, client gets NoneType. Fix it with return: 's3' + Cloudflare R2 in 10 min."
+title: "RunPod 20 MB Response Cap: Fix NoneType with Cloudflare R2"
+description: "RunPod /runsync silently drops responses over 20 MB. Worker logs say done; client gets NoneType. Fix: return: s3 + Cloudflare R2 in ten minutes."
 date: 2026-05-20
 authors: sergei
 tags:
@@ -11,17 +11,17 @@ tags:
   - PDF
 ---
 
-*Last Updated: 2026-05-20*
+*Last Updated: 2026-05-26*
 
-If your RunPod serverless worker logs say `done` but your client raises `MineruClientError: unexpected handler return type: <class 'NoneType'>`, you've hit RunPod's bidirectional 20 MB payload cap on `/runsync`. The handler succeeded. The gateway dropped the response on the way back because the payload was too large.
+If your RunPod serverless worker logs say `done` but your client raises `unexpected handler return type: <class 'NoneType'>`, you've hit RunPod's bidirectional 20 MB payload cap on `/runsync`. The handler succeeded. The gateway dropped the response on the way back because the payload was too large.
 
-The fix: set `return: "s3"` on the job, configure four env vars on the endpoint, and point them at a Cloudflare R2 bucket. The worker uploads the result to R2 and returns a small presigned URL. Your client downloads from R2 directly. No gateway cap in the path.
+The fix is two steps. Set `return: "s3"` on the job, and configure four env vars on the endpoint pointing at a Cloudflare R2 bucket. The worker uploads the result to R2 and returns a small presigned URL. Your client downloads from R2 directly. No gateway cap in the path.
 
-I hit this on an 82-page Cyrillic fiscal report (30 MB input, ~25 MB output with embedded images) using my open-source [mineru-runpod](https://github.com/sergeyshmakov/mineru-runpod) template. Two retries via `return: "inline"` and `return: "tarball_b64"` both failed the same way. R2 mode worked first try in 211 s. The rest of this post is the debugging trail, the env-var recipe, and a few gotchas I wish someone had written down.
+I hit this on an 82-page Cyrillic fiscal report (30 MB input, ~25 MB output with embedded images) running my open-source [mineru-runpod](https://github.com/sergeyshmakov/mineru-runpod) template. Two retries via `return: "inline"` and `return: "tarball_b64"` failed the same way. R2 mode worked first try. The rest of this post is the symptom, the env-var recipe, the cost comparison vs S3, and a few gotchas worth knowing.
 
-## Why does `unexpected handler return type: <class 'NoneType'>` happen on a successful parse?
+## Why does my RunPod worker return NoneType after a successful parse?
 
-The worker handler returned a valid dict. RunPod's runtime then tried to POST that result back to RunPod's API via `/job-done`, and the API returned HTTP 400 Bad Request because the payload was too large. The result was discarded. The SDK saw no output, returned None to the client, and the client wrapper raised this error.
+The worker handler completed and returned a valid dict. RunPod's runtime then tried to POST that result back to RunPod's API via `/job-done`, and the API returned HTTP 400 because the payload exceeded ~20 MB. The result was discarded. The SDK saw no output, returned `None` to the client, and the client wrapper raised the `NoneType` error.
 
 The worker logs make the chain explicit:
 
@@ -31,36 +31,34 @@ The worker logs make the chain explicit:
  url='https://api.runpod.ai/v2/<endpoint>/job-done/<worker>/sync-fdcd03cd-...?gpu=NVIDIA+RTX+A5000&isStream=false'"}
 ```
 
-The first line shows the handler finished cleanly: 82 pages parsed in 91.8 s on an RTX A5000. The second line shows the gateway rejecting the result. The handler never knows; it already returned. The SDK sees the discarded result and returns None to your code.
+The first line shows the handler finished cleanly: 82 pages parsed in 91.8 s on the worker (this test ran on A5000; on the current 4090 default the warm parse is 2–3× faster). The second line shows the gateway rejecting the result. The handler already returned and never knows the rejection happened. The SDK sees the discarded result and returns `None` to your code.
 
-If you see this on a small doc, the diagnosis is different (worker OOM, hard crash, timeout). On a multi-page parse that the worker logs as `done`, the answer is almost always the 20 MB cap.
+If you see this `NoneType` error on a small doc, the diagnosis is different (worker OOM, crash, timeout). On a multi-page parse that the worker logs as `done`, the answer is almost always the 20 MB cap.
 
-## What is RunPod's `/runsync` response payload limit?
+## What is RunPod's /runsync response payload limit?
 
-RunPod's `/runsync` gateway caps payloads at roughly 20 MB in both directions. The request cap affects `file_b64` inline uploads; the response cap affects what the worker can return. Both are independent of execution time and memory budget. A fast, successful parse can hit the response cap simply by producing a large output.
-
-The two directions:
+RunPod's `/runsync` gateway caps payloads at roughly **20 MB in both directions**. The request cap affects `file_b64` inline uploads. The response cap affects what the worker can return. Both are independent of execution time and memory budget. A fast, successful parse can hit the response cap simply by producing a large output.
 
 | Direction | Limit | What triggers it |
 |---|---|---|
 | Request → gateway → worker | ~20 MB | `file_b64` inline transport for large PDFs |
 | Worker → gateway → client | ~20 MB | Multi-page parse outputs with embedded images |
 
-The request cap is in [RunPod's docs](https://docs.runpod.io/serverless/endpoints/operations) and is widely discussed. The response cap is mentioned only in passing. I found three open issues from other users hitting the same symptom and not realising what it was, so this post is partly to make that searchable.
+The request cap is in [RunPod's docs](https://docs.runpod.io/serverless/endpoints/operations) and widely discussed. The response cap is mentioned only in passing. I found three open issues on the runpod-workers repos where other users hit the same symptom and didn't realise what it was, so this post is partly to make that searchable.
 
-The practical threshold for mineru-runpod: anything past ~50 multi-page documents with embedded images. Pure-text PDFs are fine for longer. Image-heavy PDFs hit the cap sooner.
+Practical threshold for mineru-runpod: pure-text PDFs are fine for longer. Image-heavy PDFs with embedded raster output hit the response cap around 50–80 pages on `inline` or `tarball_b64` transport.
 
-## Does `return: "tarball_b64"` get around the cap?
+## Does `return: "tarball_b64"` get around the 20 MB cap?
 
-No. `return: "tarball_b64"` gzips the output into a single .tar.gz before base64-encoding it. Gzip helps the JSON and Markdown text well, but the page images inside the tarball are already raster bytes (PNG, JPEG), so they barely compress. For multi-page parses with embedded images, the tarball output stays over 20 MB.
+No. `return: "tarball_b64"` gzips the output into a single .tar.gz before base64-encoding it. Gzip compresses the JSON and Markdown text well, but the page images inside the tarball are already raster bytes (PNG, JPEG) and barely compress further. Multi-page parses with embedded images keep the tarball over 20 MB.
 
-I confirmed this on the same 82-page PDF: same 400 Bad Request from `/job-done`, same NoneType in the client. Both `inline` and `tarball_b64` paths route through the gateway response, so both inherit the cap. Only `return: "s3"` avoids it because the worker uploads out-of-band.
+I confirmed this on the same 82-page PDF. Same 400 from `/job-done`. Same `NoneType` in the client. Both `inline` and `tarball_b64` route through the gateway response, so both inherit the cap. Only `return: "s3"` avoids it because the worker uploads out-of-band.
 
-## How do I fix the 20 MB RunPod response cap with Cloudflare R2?
+## How do I configure Cloudflare R2 to bypass the RunPod response cap?
 
-Set `return: "s3"` in the job input, then configure four env vars on the RunPod endpoint pointing at a Cloudflare R2 bucket. The worker will upload the gzipped tarball directly to R2 and return a small presigned URL (~1 h TTL). Your client downloads from R2.
+Set `return: "s3"` in the job input, then add four env vars on the RunPod endpoint pointing at a [Cloudflare R2](https://developers.cloudflare.com/r2/) bucket. The worker uploads the gzipped tarball directly to R2 and returns a small presigned URL (~1 h TTL). Your client downloads from R2.
 
-The job input is identical except for the one field:
+The job input changes one field:
 
 ```json
 {
@@ -71,7 +69,7 @@ The job input is identical except for the one field:
 }
 ```
 
-The four env vars go on the **endpoint** (not the template, since they're secrets):
+The four env vars go on the **endpoint** (not the template — they're secrets):
 
 | Env var | Cloudflare R2 value |
 |---|---|
@@ -81,27 +79,27 @@ The four env vars go on the **endpoint** (not the template, since they're secret
 | `BUCKET_SECRET_ACCESS_KEY` | R2 API token secret |
 | `BUCKET_REGION` *(optional)* | `auto` |
 
-You generate the access key pair in the Cloudflare dashboard: **R2 → Manage R2 API Tokens → Create with "Object Read & Write" on the bucket**. The worker auto-restarts when you save endpoint env vars in RunPod. Test with one small doc before sending production traffic.
+You generate the access key pair in the Cloudflare dashboard: **R2 → Manage R2 API Tokens → Create API Token → Object Read & Write scoped to the bucket**. The worker auto-restarts when you save endpoint env vars in RunPod. Test with one small doc before sending production traffic.
 
-## Why Cloudflare R2 over AWS S3 for RunPod output buckets?
+## Why pick Cloudflare R2 over AWS S3 for RunPod output storage?
 
-R2 has zero egress fees, a 10 GB free storage tier, 1M Class A ops and 10M Class B ops per month free, and is fully S3-compatible. AWS S3 charges egress at roughly $0.085/GB plus storage at $0.023/GB/month. For a RunPod pipeline doing dozens of GB of I/O per month, R2's bill stays near zero while S3 lands in the $5–$15 range.
+R2 has **zero egress fees**, a 10 GB free storage tier, 1M Class A ops and 10M Class B ops per month free, and is fully S3-compatible. AWS S3 charges egress at roughly $0.085/GB plus storage at $0.023/GB/month. For a RunPod pipeline doing dozens of GB of I/O per month, R2's bill stays near zero while S3 lands in the $5–$15 range.
 
 A back-of-envelope month for the workload I tested:
 
-- 1,000 multi-page parses, average output 8 MB → 8 GB stored, then deleted
+- 1,000 multi-page parses, average output 8 MB → 8 GB stored then deleted
 - 1,000 worker→bucket uploads + 1,000 client→bucket downloads = 2,000 ops
-- Storage cost: free (under 10 GB). Egress: free (R2 doesn't bill egress). Ops: free (well under 1M Class A).
+- Storage: free (under 10 GB). Egress: free (R2 doesn't bill egress). Ops: free (well under 1M Class A).
 
-Same workload on S3: ~$0.18 storage + ~$0.68 egress + per-request fees, maybe $1–$3 total. Cheap, but R2's $0 is cheaper.
+Same workload on S3: ~$0.18 storage + ~$0.68 egress + per-request fees, maybe $1–$3 total. Cheap but R2's $0 is cheaper.
 
-S3 still makes sense if you're already deep in AWS, if you need IAM-controlled access patterns, or if RunPod workers and your AWS region are colocated tightly enough that egress doesn't apply. For everyone else and especially for solo / indie deploys, R2 is the right default. ([R2 pricing reference](https://developers.cloudflare.com/r2/pricing/).)
+S3 still makes sense if you're already deep in AWS, if you need IAM-controlled access patterns, or if RunPod workers and your AWS region are colocated tightly enough that egress doesn't apply. For everyone else and especially for solo / indie deploys, R2 is the right default. See [R2 pricing](https://developers.cloudflare.com/r2/pricing/) for current rates.
 
 ## What does the parse flow look like end-to-end with `return: "s3"`?
 
-The worker pulls the input PDF (from `file_url`, `file_b64`, or `volume_path`), parses with MinerU, gzips the outputs into a tarball, uploads it to R2 via the configured `BUCKET_*` env vars, and returns a JSON response with `tarball_url`, `tarball_url_expires_in` (3600 s), and `bucket_key`. Your client follows the URL and extracts the tarball locally.
+The worker fetches the input PDF, runs MinerU, gzips the outputs into a tarball, uploads to R2 via the configured `BUCKET_*` env vars, and returns a small JSON response with `tarball_url`, `tarball_url_expires_in` (3600 s), and `bucket_key`. Your client follows the URL and extracts the tarball locally. No payload ever crosses RunPod's 20 MB-capped response path.
 
-Concrete numbers from my 82-page test:
+Concrete numbers from the 82-page test (on A5000; current default is 4090):
 
 ```python
 result = client.parse_document(
@@ -117,34 +115,36 @@ client.save_s3_tarball(result, "./out/")
 # downloads + extracts -> out/report.md, out/report_content_list_v2.json, out/images/, ...
 ```
 
-Handler took 211 s for 82 pages: ~112 s of vLLM cold-start absorbed into the first call, then ~92 s of warm parsing (1.1 s/page on an RTX A5000), then ~11 s for the R2 upload (the `package` phase in the debug block). The output extracted to a 313 KB markdown file plus structured JSON plus per-page images. End-to-end client wall: ~3.5 min for a document that previously couldn't return its output at all.
+End-to-end wall-clock: 211 s for an 82-page doc on a cold worker. Breakdown: ~112 s before MinerU started parsing (worker boot + warmup), ~92 s warm parsing (1.1 s/page on A5000), ~11 s gzip and upload to R2 (the `package` phase). The extracted output: 313 KB Markdown plus structured JSON plus per-page images. Roughly 3.5 minutes for a document that previously couldn't return its output at all.
 
-## What I'd watch out for
+The cold-start portion is a separate concern from the response cap. [The FlashBoot mechanism investigation](/mineru-runpod/blog/runpod-flashboot-mechanism-investigation/) covers why the ~112 s exists, how the boot-time warmup interacts with RunPod's snapshot system, and when subsequent cold starts are much faster.
 
-A few things the docs don't say loudly:
+## What should I watch out for with the R2 bridge?
 
-- **The presigned URL TTL is 60 minutes.** If your client is slow to download (e.g. a job-queue worker that picks up results minutes later), bump the TTL by editing `_S3_PRESIGN_TTL_SECONDS` in the handler. Don't rely on the default in long-tail flows.
+Four things the docs don't say loudly. The presigned URL TTL is 60 minutes. R2 doesn't auto-clean uploaded objects. One bucket can serve input and output. The 20 MB cap applies to `/run` (async) too, not just `/runsync`.
+
+- **Presigned URL TTL is 60 minutes.** If your client is slow to download (e.g. a job-queue worker that picks up results minutes later), bump `_S3_PRESIGN_TTL_SECONDS` in the handler. Don't rely on the default in long-tail flows.
 - **R2 doesn't auto-clean uploaded objects.** Add an [R2 lifecycle rule](https://developers.cloudflare.com/r2/buckets/object-lifecycles/) (e.g. delete after 7 days) so your output bucket doesn't grow forever.
-- **One R2 bucket can serve input + output.** Upload your PDFs to R2 ahead of time, pass `file_url` pointing at R2 public dev URL, and let the worker upload outputs to the same bucket under a different prefix.
-- **The 20 MB cap also bites `/run` (async).** Same gateway, same limit. Switching to async doesn't help.
+- **One R2 bucket can serve input and output.** Upload your PDFs to R2 ahead of time, pass `file_url` pointing at the R2 public dev URL, and the worker writes outputs to the same bucket at the root. Add `BUCKET_PREFIX` env var if you want outputs in a subdirectory.
+- **The 20 MB cap applies to `/run` (async) too.** Same gateway, same limit. Switching to async polling doesn't help.
 
 ## FAQ
 
 ### How do I get the R2 access key for `BUCKET_ACCESS_KEY_ID` and `BUCKET_SECRET_ACCESS_KEY`?
 
-In the Cloudflare dashboard: **R2 → Manage R2 API Tokens → Create API Token**. Set permissions to "Object Read & Write" scoped to the specific bucket. Cloudflare shows the access key ID and secret access key once; copy both into your RunPod endpoint env vars immediately. The secret is not retrievable later.
+In the Cloudflare dashboard: **R2 → Manage R2 API Tokens → Create API Token**. Set permissions to "Object Read & Write" scoped to the specific bucket. Cloudflare shows the access key ID and secret access key once; copy both into your RunPod endpoint env vars immediately. The secret isn't retrievable later.
 
 ### Does the presigned URL expire?
 
-Yes. The default TTL is 3600 seconds (one hour). If your downstream client picks up the response asynchronously (job queue, cron, etc.), download the tarball promptly or bump `_S3_PRESIGN_TTL_SECONDS` in the worker handler before redeploying.
+Yes. The default TTL is 3600 seconds (one hour). If your downstream client picks up the response asynchronously (job queue, cron, etc.), download promptly or bump `_S3_PRESIGN_TTL_SECONDS` in the worker handler before redeploying.
 
 ### Can I reuse the same R2 bucket for input and output?
 
-Yes. The worker doesn't care about the bucket layout. Upload your input PDFs to (say) `bucket/inputs/` and the worker will write outputs to `bucket/<basename>-<hash>.tar.gz` at the bucket root. Add a `BUCKET_PREFIX` env var if you want output uploads pushed into a subdirectory.
+Yes. The worker doesn't care about the bucket layout. Upload your input PDFs to `bucket/inputs/` and the worker writes outputs to `bucket/<basename>-<hash>.tar.gz` at the root. Add `BUCKET_PREFIX` env var if you want outputs pushed into a subdirectory.
 
 ### What if I can't set up R2? Is there a fallback?
 
-Yes — page chunking. Split the parse with `start_page` and `end_page` into segments small enough that each output tarball stays under 20 MB, then concatenate the `.md` files client-side. Slower (two cold starts if the worker scales to zero between calls) and you handle joining yourself, but no infra changes needed.
+Page chunking. Split the parse with `start_page` and `end_page` into segments small enough that each output tarball stays under 20 MB, then concatenate the `.md` files client-side. Slower (you may pay multiple cold starts if the worker scales to zero between calls) and you handle joining yourself, but no infra changes needed.
 
 ### Is the 20 MB cap on `/run` too, or only `/runsync`?
 
@@ -152,20 +152,24 @@ Both. RunPod's `/run` (async) and `/runsync` (synchronous) share the same gatewa
 
 ### Does using `return: "s3"` add to cold-start time?
 
-No. The S3 upload happens at the end of the parse, not the beginning. The handler's `package` phase grew from ~95 ms (in-memory tarball) to ~11 s (gzip + upload to R2) on an 82-page job, but cold-start (model load + vLLM warmup) is unchanged. The S3 mode adds a small constant to warm-job latency, not a multiplier.
+No. The S3 upload happens at the end of the parse, not the beginning. The handler's `package` phase grew from ~95 ms (in-memory tarball) to ~11 s (gzip + upload to R2) on an 82-page job, but cold-start is unchanged. The S3 mode adds a small constant to warm-job latency, not a multiplier.
 
 ### How big can the R2-uploaded tarball be?
 
-Effectively unlimited for mineru-runpod workloads. R2 supports multipart uploads up to 5 TB per object. You will hit the worker's `executionTimeoutMs` long before you hit R2's per-object limit.
+Effectively unlimited for mineru-runpod workloads. R2 supports multipart uploads up to 5 TB per object. You'll hit the worker's `executionTimeoutMs` long before you hit R2's per-object limit.
+
+### Does R2 work for input PDFs too, or only output?
+
+Both. The worker accepts `file_url` pointing at an R2 public dev URL (or a presigned R2 GET URL for private buckets) and fetches the input from R2. This avoids the inbound 20 MB cap on `file_b64` for large PDFs. You can run an R2-in / R2-out setup with one bucket and avoid every payload-size limit RunPod has.
 
 ## Where to next
 
-If you've shipped a multi-page PDF pipeline on RunPod and you're not using `return: "s3"`, you'll hit the gateway cap eventually. Set it up before you need it; the cost is ten minutes of env-var configuration and possibly zero dollars per month at indie volumes.
+If you've shipped a multi-page PDF pipeline on RunPod and you're not using `return: "s3"`, you'll hit the gateway cap eventually. Set it up before you need it. The cost is ten minutes of env-var configuration and possibly zero dollars per month at indie volumes.
 
-If you're new to the template, the [getting-started guide](/mineru-runpod/getting-started/overview/) walks through the full deploy in about ten minutes. If you're already deployed and want context on backend choice or GPU sizing, [Choosing a GPU](/mineru-runpod/guides/choosing-gpu/) covers when the default `ADA_24` (RTX 4090) is enough and when to opt up.
+If you're new to the template, the [getting-started guide](/mineru-runpod/getting-started/overview/) walks through the full deploy in about ten minutes. For the cold-start side of the picture (separate from the response cap covered here), see [the FlashBoot mechanism investigation](/mineru-runpod/blog/runpod-flashboot-mechanism-investigation/). For GPU sizing, [Choosing a GPU](/mineru-runpod/guides/choosing-gpu/) covers when the default `ADA_24` (RTX 4090) is enough and when to opt up.
 
-If this saved you time, the easiest way to say thanks is [signing up for RunPod through this referral link](https://runpod.io?ref=31jdfpnq). Star the [repo on GitHub](https://github.com/sergeyshmakov/mineru-runpod) for updates.
+If this saved you time, the easiest way to say thanks is [signing up for RunPod through this link](https://runpod.io?ref=31jdfpnq). Star the [repo on GitHub](https://github.com/sergeyshmakov/mineru-runpod) for updates.
 
 ---
 
-<small>**Disclosure:** the RunPod link in this post uses a referral code that credits me at no cost to you. Full disclosure: that's a referral link.</small>
+<small>**Disclosure:** RunPod links in this post use a referral code that credits me at no cost to you. Full disclosure: that's a referral link.</small>
