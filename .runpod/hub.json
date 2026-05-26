@@ -158,6 +158,36 @@
           "default": "",
           "advanced": true
         }
+      },
+      {
+        "key": "MINERU_SKIP_WARMUP",
+        "input": {
+          "name": "Skip eager warmup at boot",
+          "type": "string",
+          "description": "Set to 1/true/yes to bypass the eager warmup. Default off (warmup runs). Disable only for debugging cold-start ordering.",
+          "default": "",
+          "advanced": true
+        }
+      },
+      {
+        "key": "MINERU_WARMUP_BACKEND",
+        "input": {
+          "name": "Backend to warm at boot",
+          "type": "string",
+          "description": "Which backend the boot warmup loads. Should match the backend most callers will use. Default vlm-auto-engine.",
+          "default": "vlm-auto-engine",
+          "advanced": true
+        }
+      },
+      {
+        "key": "MINERU_WARMUP_LANG",
+        "input": {
+          "name": "Language hint for boot warmup",
+          "type": "string",
+          "description": "Language hint passed to the warmup parse. Only meaningful for pipeline backend; VLM ignores lang. Default en.",
+          "default": "en",
+          "advanced": true
+        }
       }
     ]
   }

@@ -160,7 +160,14 @@ Headline observations from this run:
 - Bump `idle_timeout` (template default is 10 s) — workers stay warm longer, you pay for that time
 - Set `workers_min=1` — at least one worker is always warm, you pay 24/7 for it
 - Enable RunPod's **FlashBoot** explicitly in the endpoint config (it's on by default for templates from the Hub)
-- (Planned) The eager-warmup change in [Phase 2 of the rollout plan](https://github.com/sergeyshmakov/mineru-runpod/blob/main/plans/rollout-phases.md) moves the `~100 s` MinerU+vLLM init from request-time to boot-time, so the first request after a cold worker is `~6 s` instead of `~110 s`.
+- **Eager warmup is now active by default.** The worker runs one throwaway parse against the baked test fixture during boot, before `runpod.serverless.start()` claims the event loop. This loads the MinerU model into VRAM and JIT-compiles vLLM kernels, so the first real request lands on a warm engine. Look for `[mineru-warmup] starting (backend=... lang=... fixture=/worker/test-fixture.pdf)` then `[mineru-warmup] done in Ns` in the worker logs. To disable (e.g., for debugging cold-start ordering), set `MINERU_SKIP_WARMUP=1` on the endpoint.
+
+  Tune via env vars on the endpoint:
+  - `MINERU_WARMUP_BACKEND` (default `vlm-auto-engine`) — which backend to warm. **Must match the backend most callers will use**; warming `vlm-auto-engine` but serving `pipeline` requests means the first pipeline call still pays cold-start.
+  - `MINERU_WARMUP_LANG` (default `en`) — only meaningful for the pipeline backend; VLM ignores it.
+  - `MINERU_SKIP_WARMUP=1` — bypass entirely (worker falls back to lazy load on first request, ~100s tax).
+
+  **Expected post-warmup cold-start latency for the *first request*:** TBD pending live measurement. The cold-start delta vs. lazy-load baseline determines whether FlashBoot is process-snapshot based (→ near-zero per-request cold start) or image-cache-only (→ still ~6s first request because warmup didn't survive the snapshot).
 
 ## CUDA out of memory
 

@@ -377,6 +377,13 @@ _probe_filesystem = _debug.probe_filesystem
 
 
 if __name__ == "__main__":
+    # Eager warmup before claiming the event loop. Loads the MinerU model
+    # and JIT-compiles vLLM kernels at boot so the first request doesn't
+    # pay the ~100s cold-start tax. Non-fatal on failure — see
+    # worker/warmup.py and guides/troubleshooting.mdx.
+    from worker import warmup as _warmup
+    _warmup.warmup()
+
     runpod.serverless.start({
         "handler": handler,
         "concurrency_modifier": _concurrency_modifier,
