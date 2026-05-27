@@ -1,3 +1,15 @@
+## [1.5.1](https://github.com/sergeyshmakov/mineru-runpod/compare/v1.5.0...v1.5.1) (2026-05-27)
+
+### Bug Fixes
+
+* add otel pacakges for tests ([4756f92](https://github.com/sergeyshmakov/mineru-runpod/commit/4756f922cb9b64f8dfcc0830bd65cdeb121fa7b4))
+
+### Documentation
+
+* **backlog:** re-verify Blackwell blocker against MinerU 3.2.0 ([2bc1365](https://github.com/sergeyshmakov/mineru-runpod/commit/2bc136510e8589d928e984bc29035e75b009b4e8))
+* disclosure + ref update ([2637639](https://github.com/sergeyshmakov/mineru-runpod/commit/26376390698b5e43d13729c5cbf5e28a8d47c6ec))
+* update docs and blog post about observability ([d0a2505](https://github.com/sergeyshmakov/mineru-runpod/commit/d0a250506ad3340836d0b37dbbae3c724186d15d))
+
 ## [1.5.0](https://github.com/sergeyshmakov/mineru-runpod/compare/v1.4.0...v1.5.0) (2026-05-26)
 
 ### Features
