@@ -1,5 +1,5 @@
 # mineru-runpod
- 
+
 <!-- badges: ci, license, python, runpod -->
 [![CI](https://github.com/sergeyshmakov/mineru-runpod/actions/workflows/ci.yml/badge.svg)](https://github.com/sergeyshmakov/mineru-runpod/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
