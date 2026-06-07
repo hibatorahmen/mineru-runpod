@@ -30,7 +30,10 @@ Faithfulness notes / known gaps (raise rather than silently mis-parse):
       archive_format='zip', matching the cloud API); requires the endpoint to be
       deployed with BUCKET_* env vars (transport='s3').
     - is_ocr / no_cache / cache_tolerance: accepted but no-op (no worker knob).
-    - seed: accepted but unused (RunPod webhooks aren't HMAC-signed).
+    - callback: rejected — a RunPod webhook's payload (the raw /status envelope)
+      differs from MinerU's signed {checksum, content} callback, so a MinerU
+      callback handler can't consume it; poll with get_task()/wait_for_task().
+    - seed: accepted but unused (only relevant to callback, which is rejected).
     - data_id is echoed back from an in-process map; it is not persisted on the
       endpoint, so get_task() from a *different* process won't echo it.
 """
@@ -49,7 +52,12 @@ from ._mapping import (
     build_task_response,
     build_worker_payload,
 )
-from .client import MineruClientError, _require_http_url, _safe_tar_extractall
+from .client import (
+    _DOWNLOAD_TIMEOUT_SECONDS,
+    MineruClientError,
+    _require_http_url,
+    _safe_tar_extractall,
+)
 
 
 def _download_and_extract(url: str, dest_dir: str | Path) -> Path:
@@ -66,7 +74,9 @@ def _download_and_extract(url: str, dest_dir: str | Path) -> Path:
     import zipfile  # noqa: PLC0415
 
     _require_http_url(url)
-    with urllib.request.urlopen(url) as resp:  # noqa: S310 — scheme checked above
+    with urllib.request.urlopen(  # noqa: S310 — scheme checked above
+        url, timeout=_DOWNLOAD_TIMEOUT_SECONDS
+    ) as resp:
         data = resp.read()
     dest = Path(dest_dir)
     dest.mkdir(parents=True, exist_ok=True)
@@ -134,12 +144,23 @@ class MineruApiClient:
 
         ``is_ocr`` / ``seed`` / ``no_cache`` / ``cache_tolerance`` are accepted
         for signature compatibility with the official API but have no worker-side
-        effect (the worker has no result cache). ``callback`` is wired to
-        RunPod's webhook (which, unlike MinerU's, is not HMAC-signed). See the
-        module docstring for the full gap list.
+        effect (the worker has no result cache). ``callback`` is **rejected**: a
+        RunPod webhook delivers a different, unsigned payload (the raw /status
+        envelope) than MinerU's signed ``{checksum, content}`` callback, so an
+        existing MinerU callback handler can't parse or verify it — poll with
+        :meth:`get_task` / :meth:`wait_for_task` instead. See the module docstring
+        for the full gap list.
         """
         if not url:
             raise ValueError("url is required")
+        if callback:
+            raise ValueError(
+                "callback is not supported by the compat client: a RunPod webhook "
+                "delivers a different, unsigned payload (the raw /status envelope) "
+                "than MinerU's signed {checksum, content} callback, so existing "
+                "MinerU callback handlers can't parse or verify it. Poll with "
+                "get_task() / wait_for_task() instead."
+            )
 
         payload = build_worker_payload(
             url=url,
@@ -152,14 +173,8 @@ class MineruApiClient:
             transport=self._wait_transport,
         )
 
-        # Pre-wrap so we can attach a sibling `webhook` field; endpoint.run()
-        # leaves an already-wrapped {"input": ...} body untouched.
-        run_body: dict[str, Any] = {"input": payload}
-        if callback:
-            run_body["webhook"] = callback
-
         try:
-            job = self._endpoint.run(run_body)
+            job = self._endpoint.run(payload)
         except Exception as e:  # noqa: BLE001 — uniform transport-error surface
             raise MineruClientError(f"endpoint submission failed: {e}") from e
 

@@ -45,6 +45,12 @@ def _safe_tar_extractall(tar, dest: Path) -> None:
         tar.extractall(dest)
 
 
+# Socket timeout (seconds) for archive downloads — long enough for slow CDNs /
+# large outputs, short enough that a dead or stalled URL can't hang the caller
+# forever. Mirrors the worker's URL_FETCH_TIMEOUT_SECONDS.
+_DOWNLOAD_TIMEOUT_SECONDS = 120.0
+
+
 def _require_http_url(url: str) -> None:
     """Reject non-HTTP(S) archive URLs before fetching. Worker presigned URLs are
     always https; allowing file://, ftp://, etc. from a (possibly caller-supplied)
@@ -286,7 +292,9 @@ class MineruClient:
         # only use the tarball_b64 / inline paths.
         import urllib.request  # noqa: PLC0415
         _require_http_url(entry["tarball_url"])
-        with urllib.request.urlopen(entry["tarball_url"]) as resp:  # noqa: S310
+        with urllib.request.urlopen(  # noqa: S310
+            entry["tarball_url"], timeout=_DOWNLOAD_TIMEOUT_SECONDS
+        ) as resp:
             data = resp.read()
         dest = Path(dest_dir)
         dest.mkdir(parents=True, exist_ok=True)

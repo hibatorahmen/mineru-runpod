@@ -124,7 +124,7 @@ The response dicts have the same shape (`{"code": 0, "msg": "ok", "data": {...}}
 | `language` | `lang` | default `ch`, like MinerU; affects the `pipeline` backend only |
 | `page_ranges` | `start_page` / `end_page` | single contiguous **1-based** range (`"5"` or `"2-6"`) |
 | `data_id` | echoed back in `get_task` | tracking id; see the gaps note below |
-| `callback` | RunPod webhook | fired on completion (not HMAC-signed like MinerU's) |
+| `callback` | not supported → raises | RunPod's webhook payload (raw `/status`) differs from MinerU's signed `{checksum, content}` callback; poll with `get_task` / `wait_for_task` |
 
 ## Task states
 
@@ -156,7 +156,7 @@ The compat client raises a clear error rather than silently mis-parsing when you
 | `extra_formats` (`docx` / `html` / `latex`) | ❌ worker emits markdown + content_list + middle + images only → raises |
 | `page_ranges` multi-range (`"2,4-6"`) | ❌ one contiguous slice per job → raises (submit separate tasks) |
 | `is_ocr`, `no_cache`, `cache_tolerance` | accepted, no-op (no worker equivalent) |
-| `seed` (callback signing) | accepted, unused (RunPod webhooks aren't signed) |
+| `callback` / `seed` | ❌ `callback` raises — RunPod webhooks deliver a different, unsigned payload than MinerU's signed `{checksum, content}` callback; `seed` accepted but unused |
 | `data_id` | echoed from an in-process map; a `get_task` call in a *different* process won't echo it |
 | `data.extract_progress` (page counts) | not populated — RunPod's status API exposes `state`, not per-page progress |
 | Batch (`POST /extract/task/batch`, `file-urls/batch`) | not yet — submit tasks individually for now |

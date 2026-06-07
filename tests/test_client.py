@@ -342,3 +342,28 @@ def test_save_s3_tarball_rejects_non_http_url(tmp_path):
     """A file:// (or other non-HTTP) tarball_url is refused before fetching."""
     with pytest.raises(MineruClientError, match="non-HTTP"):
         MineruClient.save_s3_tarball({"tarball_url": "file:///etc/passwd"}, tmp_path / "out")
+
+
+def test_save_s3_tarball_passes_a_timeout(tmp_path, monkeypatch):
+    """urlopen must be called with a timeout so a stalled download can't hang forever."""
+    captured = {}
+
+    class _Resp:
+        def read(self):
+            return _md_tarball_bytes()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def fake_urlopen(url, *a, **k):
+        captured["timeout"] = k.get("timeout")
+        return _Resp()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    MineruClient.save_s3_tarball(
+        {"tarball_url": "https://bucket.example/fake.tar.gz"}, tmp_path / "out"
+    )
+    assert isinstance(captured["timeout"], (int, float)) and captured["timeout"] > 0

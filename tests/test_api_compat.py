@@ -278,10 +278,12 @@ def test_create_task_builds_payload_and_returns_task_id(fake_endpoint):
     assert "webhook" not in body
 
 
-def test_create_task_wires_callback_to_webhook(fake_endpoint):
+def test_create_task_rejects_callback(fake_endpoint):
+    """callback is unsupported — a RunPod webhook's payload differs from MinerU's
+    signed {checksum, content} callback, so we reject rather than mislead."""
     client = MineruApiClient(endpoint_id="ep-1", api_key="x")
-    client.create_task("https://x/p.pdf", callback="https://hook.example/cb")
-    assert client._endpoint.last_run["webhook"] == "https://hook.example/cb"
+    with pytest.raises(ValueError, match="callback is not supported"):
+        client.create_task("https://x/p.pdf", callback="https://hook.example/cb")
 
 
 def test_create_task_requires_url(fake_endpoint):
@@ -502,3 +504,33 @@ def test_download_results_zip_traversal_is_contained(fake_endpoint, tmp_path, mo
     response = {"data": {"state": "done", "full_zip_url": "https://bucket.example/evil.zip"}}
     client.download_results(response, tmp_path / "out")
     assert not (tmp_path / "escape.txt").exists()
+
+
+def test_download_results_passes_a_timeout(fake_endpoint, tmp_path, monkeypatch):
+    """urlopen must be called with a timeout so a stalled download can't hang forever."""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, mode="w") as zf:
+        zf.writestr("doc.md", "x")
+    captured = {}
+
+    class _Resp:
+        def read(self):
+            return buf.getvalue()
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def fake_urlopen(url, *a, **k):
+        captured["timeout"] = k.get("timeout")
+        return _Resp()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    client = MineruApiClient(endpoint_id="ep-1", api_key="x")
+    client.download_results(
+        {"data": {"state": "done", "full_zip_url": "https://bucket.example/o.zip"}},
+        tmp_path / "out",
+    )
+    assert isinstance(captured["timeout"], (int, float)) and captured["timeout"] > 0
