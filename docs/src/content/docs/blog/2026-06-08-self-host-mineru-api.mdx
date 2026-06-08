@@ -101,7 +101,7 @@ One auth note: the self-hosted endpoint authenticates with your RunPod API key, 
 
 ## What doesn't carry over from the cloud API?
 
-Most of it carries; four things don't. The compat client **rejects** `callback` (a RunPod webhook delivers a different, unsigned payload than MinerU's signed `{checksum, content}` callback, so it raises instead of misleading you), and it doesn't support `extra_formats` (docx/html/latex), the `MinerU-HTML` model, or multi-range `page_ranges` like `"2,4-6"`. Batch isn't wired yet. And `full_zip_url` requires the `BUCKET_*` setup above.
+Most of it carries; four things don't. The compat client **rejects** `callback` (a RunPod webhook delivers a different, unsigned payload than MinerU's signed `{checksum, content}` callback, so it raises instead of misleading you), and it doesn't support `extra_formats` (docx/html/latex), the `MinerU-HTML` model, or multi-range `page_ranges` like `"2,4-6"`. There's no batch endpoint (RunPod's queue already parallelizes individual jobs across workers, so one isn't needed). And `full_zip_url` requires the `BUCKET_*` setup above.
 
 The full list, so there are no surprises:
 
@@ -113,9 +113,9 @@ The full list, so there are no surprises:
 | `extra_formats` (docx / html / latex) | Not produced by this worker, raises |
 | `page_ranges` multi-range (`"2,4-6"`) | One contiguous range per job, raises otherwise |
 | `callback` + `seed` | Rejected (poll with `get_task` / `wait_for_task` instead) |
-| Batch (`/extract/task/batch`) | Not yet; submit tasks individually for now |
+| Batch (`/extract/task/batch`) | Not offered; submit tasks individually and raise `workers_max` — RunPod's queue parallelizes them across workers |
 
-Where it falls down: if your pipeline leans on webhook callbacks or exports to DOCX/LaTeX, the compat client isn't a clean swap today. Batch is the next thing on the roadmap. For everything else, the create / poll / download path behaves like the SaaS.
+Where it falls down: if your pipeline leans on webhook callbacks or exports to DOCX/LaTeX, the compat client isn't a clean swap today. There's no batch endpoint either, but you rarely need one: submit tasks individually and let RunPod fan them across `workers_max` workers (the queue parallelizes them). For everything else, the create / poll / download path behaves like the SaaS.
 
 One more practical detail. The compat client is URL-only, mirroring the cloud API's `POST /extract/task`, which doesn't accept file uploads. For small local files you don't need to host anything: use the native `MineruClient` with `file_b64` instead, which sends the bytes inline (fine under RunPod's ~20 MB request cap). I parsed a 522 KB scanned Russian invoice that way and got clean Cyrillic Markdown back, no bucket round-trip involved.
 

@@ -124,16 +124,14 @@ For single-file jobs the markdown lives at `result.results[0].markdown`. Higher-
 
 | Field | Type | Notes |
 |---|---|---|
-| `basename` | string | Echo of the input `basename`, useful when batches arrive |
+| `basename` | string | Echo of the input `basename`, handy for correlating many concurrent jobs |
 | `source` | string | Echo of the input transport: `url:...`, `b64`, or `volume:/path/...` |
 | `pages_requested` | int | The slice the caller asked for. `-1` if `end_page` was open-ended |
 | `tarball_b64` | string | Present when `transport: "tarball_b64"`. Base64-encoded archive of the output directory — `.tar.gz` by default, `.zip` when `archive_format: "zip"` |
 | `markdown`, `content_list`, `middle`, `images` | various | Present when `transport: "inline"`. The set of keys reflects the `formats` filter — see below |
 | `tarball_url`, `tarball_url_expires_in`, `bucket_key`, `bucket_bytes` | various | Present when `transport: "s3"`. The archive is `.tar.gz` by default, `.zip` when `archive_format: "zip"`. See [Output modes → s3](/mineru-runpod/guides/output-modes/) |
 
-:::note[Reserved for batch input]
-A future batch-input phase will add per-entry `ok` and `error` fields so a single-job multi-file submission can report partial success. Today's single-file responses do not include them.
-:::
+Each job parses one file. To process many documents, submit them as individual jobs and raise `workers_max` — RunPod's queue runs them in parallel across workers (see [Scaling](/mineru-runpod/guides/scaling/)).
 
 ### When `transport: "inline"`
 

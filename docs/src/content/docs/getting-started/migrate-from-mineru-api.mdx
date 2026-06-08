@@ -159,7 +159,7 @@ The compat client raises a clear error rather than silently mis-parsing when you
 | `callback` / `seed` | ❌ `callback` raises — RunPod webhooks deliver a different, unsigned payload than MinerU's signed `{checksum, content}` callback; `seed` accepted but unused |
 | `data_id` | echoed from an in-process map; a `get_task` call in a *different* process won't echo it |
 | `data.extract_progress` (page counts) | not populated — RunPod's status API exposes `state`, not per-page progress |
-| Batch (`POST /extract/task/batch`, `file-urls/batch`) | not yet — submit tasks individually for now |
+| Batch (`POST /extract/task/batch`, `file-urls/batch`) | not offered — submit tasks individually and raise `workers_max`; RunPod's queue runs them in parallel across workers ([Scaling](/mineru-runpod/guides/scaling/)) |
 
 ## When to switch to the native client
 
