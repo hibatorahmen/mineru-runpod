@@ -15,6 +15,7 @@
 # the dependency on RunPod's Cached Models setup, the Network Volume, and
 # any per-endpoint runtime-download tax. Trade-off: image grows by ~4 GB.
 
+
 ARG VLLM_VERSION=v0.11.2
 FROM vllm/vllm-openai:${VLLM_VERSION}
 
